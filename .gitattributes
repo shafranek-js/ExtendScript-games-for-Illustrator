@@ -1,0 +1,4 @@
+# Illustrator is sensitive to both the UTF-8 BOM (games must keep it) and line
+# endings in .jsx files, so git must not normalise anything: bytes stay exactly
+# as committed.
+* -text

@@ -1,0 +1,9 @@
+# Local pre-refactor snapshot, kept for regression testing only.
+# It is not part of the published project.
+_baseline_*/
+
+# OS / editor noise
+Thumbs.db
+desktop.ini
+.DS_Store
+*.log
