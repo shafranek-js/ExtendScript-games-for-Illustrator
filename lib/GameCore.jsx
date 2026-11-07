@@ -17,11 +17,17 @@ function rgbToNorm(rgbArr, alpha) {
 // 16-point trigonometric approximation of a rounded rectangle.
 // ScriptUIGraphics has no bezier curves and no roundedRectPath.
 function buildRoundRectPath(g, x, y, w, h, r) {
+    g.newPath();
+    appendRoundRect(g, x, y, w, h, r);
+}
+
+// Adds one rounded rectangle as a sub-path to the path already open in g.
+// fillBatchRects relies on this: N rectangles become ONE native fillPath call.
+function appendRoundRect(g, x, y, w, h, r) {
     var rad = Math.min(r, w / 2, h / 2);
     var c30 = 0.8660254 * rad;
     var s30 = 0.5 * rad;
 
-    g.newPath();
     g.moveTo(x + rad, y);
     g.lineTo(x + w - rad, y);
     g.lineTo(x + w - rad + s30, y + rad - c30);
@@ -42,6 +48,28 @@ function buildRoundRectPath(g, x, y, w, h, r) {
     g.lineTo(x + rad - c30, y + rad - s30);
     g.lineTo(x + rad - s30, y + rad - c30);
     g.closePath();
+}
+
+// list: [[x, y, w, h], ...]. One fill for the whole batch.
+function fillBatchRects(g, list, r, brush) {
+    if (!list || !list.length) return;
+    g.newPath();
+    for (var i = 0; i < list.length; i++) {
+        var it = list[i];
+        appendRoundRect(g, it[0], it[1], it[2], it[3], r);
+    }
+    g.fillPath(brush);
+}
+
+// list: [[cx, cy, radius], ...]. One fill for the whole batch.
+function fillBatchCircles(g, list, brush) {
+    if (!list || !list.length) return;
+    g.newPath();
+    for (var i = 0; i < list.length; i++) {
+        var it = list[i];
+        g.ellipsePath(it[0] - it[2], it[1] - it[2], it[2] * 2, it[2] * 2);
+    }
+    g.fillPath(brush);
 }
 
 function fillRoundRect(g, x, y, w, h, r, brush) {

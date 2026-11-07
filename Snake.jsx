@@ -4,6 +4,7 @@
 #include "lib/GameI18n.jsx"
 #include "lib/GamePersist.jsx"
 #include "lib/GamePerf.jsx"
+#include "lib/GameAnim.jsx"
 
 /**
  * SNAKE — Designer Edition for Adobe Illustrator (ExtendScript / ScriptUI)
@@ -166,6 +167,7 @@
     // arenaMode: 0 = Walls, 1 = Portal Wrap, 2 = Maze + Portal
     var arenaMode = 0;
     var snake = []; // Array of {x, y}, index 0 is Head
+    var prevBody = []; // Cells before the last step, for smooth rendering
     var walls = []; // Array of {x, y}
     var curDir = { dx: 1, dy: 0 };
     var dirQueue = [];
@@ -345,6 +347,13 @@
         }
 
         if (gameOver || paused) return sparksMoved;
+
+        // Snapshot the body and restart the interpolation clock.
+        prevBody = [];
+        for (var pb = 0; pb < snake.length; pb++) {
+            prevBody.push({ x: snake[pb].x, y: snake[pb].y });
+        }
+        animBegin(getStepIntervalMs());
 
         if (dirQueue.length > 0) {
             curDir = dirQueue.shift();
@@ -552,6 +561,7 @@
     // ==================== GAME SCENE RENDERING ====================
 
     function drawSnakeScene(g) {
+        animProgress();
         var cardRgb = darkTheme ? PALETTE.hudCardDark : PALETTE.hudCardLight;
         var lipRgb = darkTheme ? PALETTE.hudLipDark : PALETTE.hudLipLight;
         var labelRgb = darkTheme ? [168, 190, 174] : [80, 92, 82];
@@ -589,15 +599,16 @@
         fillRoundRect(g, 0, PLAY_Y, BOARD_SIZE, BOARD_SIZE, 9, frameBrush);
         fillRoundRect(g, 4, PLAY_Y + 4, BOARD_SIZE - 8, BOARD_SIZE - 8, 6, boardBrush);
 
+        // Checkerboard is ~200 squares: collect them and fill in one batch.
+        var altRects = [];
         for (var r = 0; r < GRID; r++) {
             for (var c = 0; c < GRID; c++) {
                 if ((r + c) % 2 === 1) {
-                    var cx = PAD + c * STEP;
-                    var cy = PLAY_Y + PAD + r * STEP;
-                    fillRoundRect(g, cx, cy, CELL, CELL, 2.5, cellAltBrush);
+                    altRects.push([PAD + c * STEP, PLAY_Y + PAD + r * STEP, CELL, CELL]);
                 }
             }
         }
+        fillBatchRects(g, altRects, 2.5, cellAltBrush);
 
         // --- 3. Obstacle Walls (in Labyrinth Mode) ---
         if (walls.length > 0) {
@@ -644,8 +655,8 @@
                 Math.max(0, segRgb[1] - 42),
                 Math.max(0, segRgb[2] - 42)
             ];
-            var sx = PAD + seg.x * STEP;
-            var sy = PLAY_Y + PAD + seg.y * STEP;
+            var sx = PAD + animLerp((prevBody[i] ? prevBody[i].x : seg.x), seg.x) * STEP;
+            var sy = PLAY_Y + PAD + animLerp((prevBody[i] ? prevBody[i].y : seg.y), seg.y) * STEP;
             var rad = (i === 0) ? 6 : (i === snake.length - 1 ? 5.5 : 4);
 
             var sLip = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(segLipRgb, 1));
@@ -938,11 +949,17 @@
 
     function checkAutoStep() {
         var now = new Date().getTime();
-        if (now - lastStepTime >= getStepIntervalMs()) {
+        var interval = getStepIntervalMs();
+        if (now - lastStepTime >= interval) {
             lastStepTime = now;
             if (stepSnakeOnce()) {
                 refreshUI();
+                return;
             }
+        }
+        // Between logic steps repaint at ~30 fps; the renderer interpolates.
+        if (animDue(33)) {
+            refreshUI();
         }
     }
 

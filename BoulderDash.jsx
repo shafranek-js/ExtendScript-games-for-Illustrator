@@ -4,6 +4,7 @@
 #include "lib/GameI18n.jsx"
 #include "lib/GamePersist.jsx"
 #include "lib/GamePerf.jsx"
+#include "lib/GameAnim.jsx"
 
 /**
  * BOULDER DASH — Designer Edition for Adobe Illustrator (ExtendScript / ScriptUI)
@@ -291,6 +292,7 @@
     var caveIndex = 0;
     var grid = [];      // [r][c] char
     var falling = [];   // [r][c] boolean (whether boulder/gem at [r][c] was falling last tick)
+    var animFrom = [];  // [r][c] {x, y} source cell of an object that moved this step
     var monsters = [];  // { x, y, dx, dy }
     var sparks = [];    // { x, y, vx, vy, color, life }
     var flashTicks = 0;
@@ -508,6 +510,7 @@
             if (bx > 0 && bx < COLS - 1 && grid[ny][bx] === " " && !falling[ny][nx]) {
                 grid[ny][bx] = "O";
                 falling[ny][bx] = false;
+                animFrom[ny][nx] = { x: player.x, y: player.y };
                 grid[player.y][player.x] = " ";
                 player.x = nx;
                 player.y = ny;
@@ -540,6 +543,7 @@
             if (snapOnly) {
                 grid[ny][nx] = " ";
             } else {
+                animFrom[ny][nx] = { x: player.x, y: player.y };
                 grid[player.y][player.x] = " ";
                 player.x = nx;
                 player.y = ny;
@@ -573,6 +577,15 @@
 
         if (paused || gameOver) return changed;
 
+        // Fresh interpolation map for this step.
+        animFrom = [];
+        for (var ar = 0; ar < ROWS; ar++) {
+            var arRow = [];
+            for (var ac = 0; ac < COLS; ac++) arRow.push(null);
+            animFrom.push(arRow);
+        }
+        animBegin(155);
+
         tickCount++;
         changed = true;
 
@@ -600,6 +613,7 @@
                     falling[r + 1][c] = true;
                     falling[r][c] = false;
                     movedThisTick[r + 1][c] = true;
+                    animFrom[r + 1][c] = { x: c, y: r };
                 }
                 // Case B: Falling object hits Player or Monster below!
                 else if (wasFalling && (below === "P" || below === "M")) {
@@ -622,6 +636,7 @@
                         falling[r][c - 1] = true;
                         falling[r][c] = false;
                         movedThisTick[r][c - 1] = true;
+                        animFrom[r][c - 1] = { x: c, y: r };
                         rolled = true;
                     }
                     // Try rolling Right
@@ -631,6 +646,7 @@
                         falling[r][c + 1] = true;
                         falling[r][c] = false;
                         movedThisTick[r][c + 1] = true;
+                        animFrom[r][c + 1] = { x: c, y: r };
                         rolled = true;
                     }
                     if (!rolled) {
@@ -665,6 +681,7 @@
                 var mnx = m.x + d.dx;
                 var mny = m.y + d.dy;
                 if (grid[mny][mnx] === " ") {
+                    animFrom[mny][mnx] = { x: m.x, y: m.y };
                     grid[m.y][m.x] = " ";
                     m.x = mnx;
                     m.y = mny;
@@ -821,6 +838,7 @@
     // ==================== FULL SCENE RENDERER ====================
 
     function drawBoulderDashScene(g) {
+        animProgress();
         var cardRgb = darkTheme ? PALETTE.hudCardDark : PALETTE.hudCardLight;
         var lipRgb = darkTheme ? PALETTE.hudLipDark : PALETTE.hudLipLight;
         var labelRgb = darkTheme ? [196, 182, 168] : [82, 72, 64];
@@ -868,76 +886,117 @@
         var gemSparkB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(PALETTE.gemSpark, 1));
 
         // --- 3. Render Cave Grid ---
+        // Pass 1 collects static tiles: ~1200 per-cell fills become ~12 batch
+        // fills, which is what makes a 30 fps repaint affordable.
+        var steelLipRects = [], steelFaceRects = [], steelDots = [];
+        var brickLipRects = [], brickFaceRects = [], brickLineRects = [];
+        var dirtLipRects = [], dirtFaceRects = [], dirtSpecks = [], dirtLipDots = [];
+        var boulderLipC = [], boulderFaceC = [], boulderHiC = [];
+        var dynamic = [];
+
         for (var r = 0; r < ROWS; r++) {
             for (var col = 0; col < COLS; col++) {
                 var ch = grid[r][col];
                 if (ch === " ") continue;
 
-                var tx = PAD + col * CELL;
-                var ty = PLAY_Y + PAD + r * CELL;
+                var srcCell = animFrom[r] ? animFrom[r][col] : null;
+                var fx = srcCell ? animLerp(srcCell.x, col) : col;
+                var fy = srcCell ? animLerp(srcCell.y, r) : r;
+                var tx = PAD + fx * CELL;
+                var ty = PLAY_Y + PAD + fy * CELL;
                 var cx = tx + CELL / 2;
                 var cy = ty + CELL / 2;
 
                 if (ch === "#") {
                     // Titanium Border Wall
-                    fillRoundRect(g, tx + 0.5, ty + 0.5, CELL - 1, CELL - 1, 2.5, steelLipB);
-                    fillRoundRect(g, tx + 0.5, ty + 0.5, CELL - 1, CELL - 3, 2.5, steelFaceB);
-                    fillCircle(g, tx + 4, ty + 4, 1.2, steelLipB);
-                    fillCircle(g, tx + CELL - 4, ty + 4, 1.2, steelLipB);
+                    steelLipRects.push([tx + 0.5, ty + 0.5, CELL - 1, CELL - 1]);
+                    steelFaceRects.push([tx + 0.5, ty + 0.5, CELL - 1, CELL - 3]);
+                    steelDots.push([tx + 4, ty + 4, 1.2]);
+                    steelDots.push([tx + CELL - 4, ty + 4, 1.2]);
                 } else if (ch === "=") {
                     // Rounded Brick Wall
-                    fillRoundRect(g, tx + 0.5, ty + 0.5, CELL - 1, CELL - 1, 3, brickLipB);
-                    fillRoundRect(g, tx + 0.5, ty + 0.5, CELL - 2, CELL - 2.5, 3, brickFaceB);
-                    fillRoundRect(g, tx + 2, ty + CELL / 2 - 1, CELL - 4, 1.5, 0.5, brickLipB);
+                    brickLipRects.push([tx + 0.5, ty + 0.5, CELL - 1, CELL - 1]);
+                    brickFaceRects.push([tx + 0.5, ty + 0.5, CELL - 2, CELL - 2.5]);
+                    brickLineRects.push([tx + 2, ty + CELL / 2 - 1, CELL - 4, 1.5]);
                 } else if (ch === ".") {
                     // Dirt / Soil with organic pebble specks
-                    fillRoundRect(g, tx + 0.5, ty + 0.5, CELL - 1, CELL - 1, 2, dirtLipB);
-                    fillRoundRect(g, tx + 0.5, ty + 0.5, CELL - 1, CELL - 2.5, 2, dirtFaceB);
-                    fillCircle(g, tx + 5, ty + 6, 1.4, dirtSpeckB);
-                    fillCircle(g, tx + 13, ty + 12, 1.6, dirtSpeckB);
-                    fillCircle(g, tx + 14, ty + 5, 1.1, dirtLipB);
+                    dirtLipRects.push([tx + 0.5, ty + 0.5, CELL - 1, CELL - 1]);
+                    dirtFaceRects.push([tx + 0.5, ty + 0.5, CELL - 1, CELL - 2.5]);
+                    dirtSpecks.push([tx + 5, ty + 6, 1.4]);
+                    dirtSpecks.push([tx + 13, ty + 12, 1.6]);
+                    dirtLipDots.push([tx + 14, ty + 5, 1.1]);
                 } else if (ch === "O") {
                     // 3D Granite Boulder
-                    fillCircle(g, cx, cy + 1, CELL * 0.44, boulderLipB);
-                    fillCircle(g, cx, cy - 0.5, CELL * 0.43, boulderFaceB);
-                    fillCircle(g, cx - 2.5, cy - 3, 2.4, hiBrush);
-                } else if (ch === "*") {
-                    // Faceted Sparkling Diamond
-                    var shimmer = ((r + col + tickCount) % 2 === 0);
-                    fillDiamondPoly(g, cx, cy + 1, CELL * 0.44, CELL * 0.44, gemOuterB);
-                    fillDiamondPoly(g, cx, cy, CELL * 0.36, CELL * 0.36, gemInnerB);
-                    if (shimmer) {
-                        fillDiamondPoly(g, cx, cy - 1.5, CELL * 0.18, CELL * 0.18, gemSparkB);
-                    }
-                } else if (ch === "E") {
-                    // Exit Hatch (flashes bright green when unlocked)
-                    var exitCol = exitPos.open
-                        ? ((tickCount % 2 === 0) ? PALETTE.exitOpen : PALETTE.gemCyan)
-                        : PALETTE.exitClosed;
-                    var exB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(exitCol, 1));
-                    fillRoundRect(g, tx + 1, ty + 1, CELL - 2, CELL - 2, 4, steelLipB);
-                    fillRoundRect(g, tx + 2.5, ty + 2.5, CELL - 5, CELL - 5, 3, exB);
-                } else if (ch === "M") {
-                    // Firefly / Butterfly Monster
-                    var mOuterB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(PALETTE.monsterBody, 1));
-                    var mCoreB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(PALETTE.monsterCore, 1));
-                    var wingR = (tickCount % 2 === 0) ? 4.2 : 3.2;
-                    fillCircle(g, cx - 4, cy - 4, wingR, mOuterB);
-                    fillCircle(g, cx + 4, cy - 4, wingR, mOuterB);
-                    fillCircle(g, cx - 4, cy + 4, wingR, mOuterB);
-                    fillCircle(g, cx + 4, cy + 4, wingR, mOuterB);
-                    fillCircle(g, cx, cy, 4.0, mCoreB);
-                } else if (ch === "P") {
-                    // Rockford Miner Character
-                    var suitB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(PALETTE.rockfordSuit, 1));
-                    var helmB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(PALETTE.rockfordHelm, 1));
-                    var eyeB = g.newBrush(g.BrushType.SOLID_COLOR, [0.1, 0.12, 0.16, 1]);
-
-                    fillRoundRect(g, tx + 2.5, ty + 2.5, CELL - 5, CELL - 4, 5, suitB);
-                    fillRoundRect(g, tx + 3.5, ty + 2, CELL - 7, 6, 3, helmB);
-                    fillCircle(g, cx - 2.5 + player.facingDx * 1.2, cy + 1, 1.5, eyeB);
-                    fillCircle(g, cx + 2.5 + player.facingDx * 1.2, cy + 1, 1.5, eyeB);
+                    boulderLipC.push([cx, cy + 1, CELL * 0.44]);
+                    boulderFaceC.push([cx, cy - 0.5, CELL * 0.43]);
+                    boulderHiC.push([cx - 2.5, cy - 3, 2.4]);
+                } else {
+                    dynamic.push({ ch: ch, tx: tx, ty: ty, cx: cx, cy: cy, r: r, col: col });
                 }
+            }
+        }
+
+        fillBatchRects(g, steelLipRects, 2.5, steelLipB);
+        fillBatchRects(g, steelFaceRects, 2.5, steelFaceB);
+        fillBatchCircles(g, steelDots, steelLipB);
+        fillBatchRects(g, brickLipRects, 3, brickLipB);
+        fillBatchRects(g, brickFaceRects, 3, brickFaceB);
+        fillBatchRects(g, brickLineRects, 0.5, brickLipB);
+        fillBatchRects(g, dirtLipRects, 2, dirtLipB);
+        fillBatchRects(g, dirtFaceRects, 2, dirtFaceB);
+        fillBatchCircles(g, dirtSpecks, dirtSpeckB);
+        fillBatchCircles(g, dirtLipDots, dirtLipB);
+        fillBatchCircles(g, boulderLipC, boulderLipB);
+        fillBatchCircles(g, boulderFaceC, boulderFaceB);
+        fillBatchCircles(g, boulderHiC, hiBrush);
+
+        // Pass 2: gems, exit, monsters and Rockford keep per-cell drawing.
+        for (var di = 0; di < dynamic.length; di++) {
+            var d = dynamic[di];
+            ch = d.ch;
+            tx = d.tx;
+            ty = d.ty;
+            cx = d.cx;
+            cy = d.cy;
+            r = d.r;
+            col = d.col;
+
+            if (ch === "*") {
+                // Faceted Sparkling Diamond
+                var shimmer = ((r + col + tickCount) % 2 === 0);
+                fillDiamondPoly(g, cx, cy + 1, CELL * 0.44, CELL * 0.44, gemOuterB);
+                fillDiamondPoly(g, cx, cy, CELL * 0.36, CELL * 0.36, gemInnerB);
+                if (shimmer) {
+                    fillDiamondPoly(g, cx, cy - 1.5, CELL * 0.18, CELL * 0.18, gemSparkB);
+                }
+            } else if (ch === "E") {
+                // Exit Hatch (flashes bright green when unlocked)
+                var exitCol = exitPos.open
+                    ? ((tickCount % 2 === 0) ? PALETTE.exitOpen : PALETTE.gemCyan)
+                    : PALETTE.exitClosed;
+                var exB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(exitCol, 1));
+                fillRoundRect(g, tx + 1, ty + 1, CELL - 2, CELL - 2, 4, steelLipB);
+                fillRoundRect(g, tx + 2.5, ty + 2.5, CELL - 5, CELL - 5, 3, exB);
+            } else if (ch === "M") {
+                // Firefly / Butterfly Monster
+                var mOuterB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(PALETTE.monsterBody, 1));
+                var mCoreB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(PALETTE.monsterCore, 1));
+                var wingR = (tickCount % 2 === 0) ? 4.2 : 3.2;
+                fillCircle(g, cx - 4, cy - 4, wingR, mOuterB);
+                fillCircle(g, cx + 4, cy - 4, wingR, mOuterB);
+                fillCircle(g, cx - 4, cy + 4, wingR, mOuterB);
+                fillCircle(g, cx + 4, cy + 4, wingR, mOuterB);
+                fillCircle(g, cx, cy, 4.0, mCoreB);
+            } else if (ch === "P") {
+                // Rockford Miner Character
+                var suitB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(PALETTE.rockfordSuit, 1));
+                var helmB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(PALETTE.rockfordHelm, 1));
+                var eyeB = g.newBrush(g.BrushType.SOLID_COLOR, [0.1, 0.12, 0.16, 1]);
+
+                fillRoundRect(g, tx + 2.5, ty + 2.5, CELL - 5, CELL - 4, 5, suitB);
+                fillRoundRect(g, tx + 3.5, ty + 2, CELL - 7, 6, 3, helmB);
+                fillCircle(g, cx - 2.5 + player.facingDx * 1.2, cy + 1, 1.5, eyeB);
+                fillCircle(g, cx + 2.5 + player.facingDx * 1.2, cy + 1, 1.5, eyeB);
             }
         }
 
@@ -1214,7 +1273,12 @@
             lastStepTime = now;
             if (stepCavePhysics()) {
                 refreshUI();
+                return;
             }
+        }
+        // Between logic steps repaint at ~30 fps; the renderer interpolates.
+        if (animDue(33)) {
+            refreshUI();
         }
     }
 

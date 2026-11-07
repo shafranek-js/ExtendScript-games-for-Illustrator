@@ -4,6 +4,7 @@
 #include "lib/GameI18n.jsx"
 #include "lib/GamePersist.jsx"
 #include "lib/GamePerf.jsx"
+#include "lib/GameAnim.jsx"
 
 /**
  * TETRIS — Designer Edition for Adobe Illustrator (ExtendScript / ScriptUI)
@@ -261,6 +262,7 @@
 
     var lastGravityTime = new Date().getTime();
     var tacticalSubSteps = 0;
+    var prevY = 0;      // previous row of the falling piece, for smooth rendering
     var saveDirty = false;
     var lastSaveTime = 0;
 
@@ -432,9 +434,11 @@
         curRot = 0;
         curX = 3;
         curY = 0;
+        prevY = 0;
         holdUsed = false;
         tacticalSubSteps = 0;
         lastGravityTime = new Date().getTime();
+        animBegin(getDropIntervalMs());
 
         if (!isValidPos(curType, curRot, curX, curY)) {
             gameOver = true;
@@ -524,7 +528,9 @@
         if (tacticalSubSteps >= 2) {
             tacticalSubSteps = 0;
             if (isValidPos(curType, curRot, curX, curY + 1)) {
+                prevY = curY;
                 curY++;
+                animBegin(getDropIntervalMs());
                 lastGravityTime = new Date().getTime();
             }
         }
@@ -547,7 +553,9 @@
                 if (tacticalSubSteps >= 3) {
                     tacticalSubSteps = 0;
                     if (isValidPos(curType, curRot, curX, curY + 1)) {
+                        prevY = curY;
                         curY++;
+                        animBegin(getDropIntervalMs());
                         lastGravityTime = new Date().getTime();
                     }
                 }
@@ -563,7 +571,9 @@
         lastGravityTime = new Date().getTime();
         tacticalSubSteps = 0;
         if (isValidPos(curType, curRot, curX, curY + 1)) {
+            prevY = curY;
             curY++;
+            animBegin(getDropIntervalMs());
             if (fromUser) {
                 score += 1;
                 if (score > bestScore) bestScore = score;
@@ -585,6 +595,7 @@
         }
         score += dist * 2;
         if (score > bestScore) bestScore = score;
+        prevY = curY;
         lastGravityTime = new Date().getTime();
         tacticalSubSteps = 0;
         lockAndClearLines();
@@ -791,6 +802,7 @@
     }
 
     function drawGameCanvas(g) {
+        animProgress();
         var frameRgb = darkTheme ? PALETTE.wellFrameDark : PALETTE.wellFrameLight;
         var wellBgRgb = darkTheme ? PALETTE.wellBgDark : PALETTE.wellBgLight;
         var emptyRgb = darkTheme ? PALETTE.cellEmptyDark : PALETTE.cellEmptyLight;
@@ -838,10 +850,12 @@
             }
 
             var activeCells = getCells(curType, curRot, curX, curY);
+            // The piece glides to its new row instead of jumping once per tick.
+            var cellDY = (animLerp(prevY, curY) - curY) * STEP;
             for (var ai = 0; ai < 4; ai++) {
                 if (activeCells[ai].y >= 0) {
                     var ax = WELL_PAD + activeCells[ai].x * STEP;
-                    var ay = WELL_PAD + activeCells[ai].y * STEP;
+                    var ay = WELL_PAD + activeCells[ai].y * STEP + cellDY;
                     draw3DBlock(g, ax, ay, CELL, curType, 1);
                 }
             }
@@ -1234,10 +1248,14 @@
     win.addEventListener("mousemove", function () {
         if (checkRealtimeGravity()) {
             refreshUI();
+        } else if (animDue(33)) {
+            refreshUI();
         }
     });
     gameCanvas.addEventListener("mousemove", function () {
         if (checkRealtimeGravity()) {
+            refreshUI();
+        } else if (animDue(33)) {
             refreshUI();
         }
     });
@@ -1311,6 +1329,8 @@
         if (k === "F15") {
             ev.preventDefault();
             if (checkRealtimeGravity()) {
+                refreshUI();
+            } else if (animDue(33)) {
                 refreshUI();
             }
             return;

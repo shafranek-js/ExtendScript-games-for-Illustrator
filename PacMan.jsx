@@ -4,6 +4,7 @@
 #include "lib/GameI18n.jsx"
 #include "lib/GamePersist.jsx"
 #include "lib/GamePerf.jsx"
+#include "lib/GameAnim.jsx"
 
 /**
  * PAC-MAN — Designer Edition for Adobe Illustrator (ExtendScript / ScriptUI)
@@ -197,6 +198,8 @@
     var pac = {
         x: 9,
         y: 15,
+        px: 9,          // previous cell, for smooth rendering
+        py: 15,
         dx: 0,
         dy: 0,
         nextDx: -1,
@@ -274,6 +277,15 @@
             { name: "Inky",   color: PALETTE.inkyCyan,  x: 8,  y: 9, dx: 0,  dy: -1, inHouse: true,  releaseDelay: 12, scatterX: 17, scatterY: 20 },
             { name: "Clyde",  color: PALETTE.clydeOrange, x: 10, y: 9, dx: 0, dy: -1, inHouse: true, releaseDelay: 20, scatterX: 1,  scatterY: 20 }
         ];
+
+        // Interpolation state: previous cells for the smooth renderer.
+        pac.px = pac.x;
+        pac.py = pac.y;
+        for (var rg = 0; rg < ghosts.length; rg++) {
+            ghosts[rg].px = ghosts[rg].x;
+            ghosts[rg].py = ghosts[rg].y;
+        }
+        animBegin(getStepIntervalMs());
     }
 
     function loadMazeStage() {
@@ -525,6 +537,15 @@
         if (paused || gameOver) return sparksMoved;
 
         tickCounter++;
+
+        // Remember where everything was, so the renderer can interpolate.
+        pac.px = pac.x;
+        pac.py = pac.y;
+        for (var gp = 0; gp < ghosts.length; gp++) {
+            ghosts[gp].px = ghosts[gp].x;
+            ghosts[gp].py = ghosts[gp].y;
+        }
+        animBegin(getStepIntervalMs());
 
         // 1. Try queued pre-turn first
         if (canPacMove(pac.x + pac.nextDx, pac.y + pac.nextDy)) {
@@ -784,8 +805,8 @@
     }
 
     function drawGhostCharacter(g, ghost) {
-        var x = PAD + ghost.x * CELL + 1.5;
-        var y = PLAY_Y + PAD + ghost.y * CELL + 1.5;
+        var x = PAD + animLerp(ghost.px, ghost.x) * CELL + 1.5;
+        var y = PLAY_Y + PAD + animLerp(ghost.py, ghost.y) * CELL + 1.5;
         var w = CELL - 3;
         var h = CELL - 3;
 
@@ -824,6 +845,7 @@
     // ==================== FULL SCENE RENDERER ====================
 
     function drawPacManScene(g) {
+        animProgress();
         var cardRgb = darkTheme ? PALETTE.hudCardDark : PALETTE.hudCardLight;
         var lipRgb = darkTheme ? PALETTE.hudLipDark : PALETTE.hudLipLight;
         var labelRgb = darkTheme ? [170, 180, 214] : [68, 76, 102];
@@ -864,6 +886,13 @@
         // --- 3. Maze Walls, Ghost Door, Dots & Power Pellets ---
         var pulseRadius = (tickCounter % 2 === 0) ? 4.8 : 3.6;
 
+        // Collect geometry, then fill in a few batches: the maze is ~100 walls
+        // and ~240 dots, and per-cell fills cannot keep up with 30 fps.
+        var wallLipRects = [];
+        var wallFaceRects = [];
+        var dotCircles = [];
+        var powerCircles = [];
+
         for (var r = 0; r < ROWS; r++) {
             for (var col = 0; col < COLS; col++) {
                 var ch = grid[r][col];
@@ -871,17 +900,22 @@
                 var ty = PLAY_Y + PAD + r * CELL;
 
                 if (ch === "#") {
-                    fillRoundRect(g, tx + 0.5, ty + 0.5, CELL - 1, CELL - 1, 3.5, wallLipB);
-                    fillRoundRect(g, tx + 0.5, ty + 0.5, CELL - 1, CELL - 3, 3.5, wallFaceB);
+                    wallLipRects.push([tx + 0.5, ty + 0.5, CELL - 1, CELL - 1]);
+                    wallFaceRects.push([tx + 0.5, ty + 0.5, CELL - 1, CELL - 3]);
                 } else if (ch === "-") {
                     fillRoundRect(g, tx, ty + CELL / 2 - 2, CELL, 4, 1.5, doorBrush);
                 } else if (ch === ".") {
-                    fillCircle(g, tx + CELL / 2, ty + CELL / 2, 2.2, dotBrush);
+                    dotCircles.push([tx + CELL / 2, ty + CELL / 2, 2.2]);
                 } else if (ch === "o") {
-                    fillCircle(g, tx + CELL / 2, ty + CELL / 2, pulseRadius, powerBrush);
+                    powerCircles.push([tx + CELL / 2, ty + CELL / 2, pulseRadius]);
                 }
             }
         }
+
+        fillBatchRects(g, wallLipRects, 3.5, wallLipB);
+        fillBatchRects(g, wallFaceRects, 3.5, wallFaceB);
+        fillBatchCircles(g, dotCircles, dotBrush);
+        fillBatchCircles(g, powerCircles, powerBrush);
 
         // --- 4. Bonus Cherry ---
         if (cherry !== null) {
@@ -896,8 +930,8 @@
         }
 
         // --- 5. Pac-Man ---
-        var pacCx = PAD + pac.x * CELL + CELL / 2;
-        var pacCy = PLAY_Y + PAD + pac.y * CELL + CELL / 2;
+        var pacCx = PAD + animLerp(pac.px, pac.x) * CELL + CELL / 2;
+        var pacCy = PLAY_Y + PAD + animLerp(pac.py, pac.y) * CELL + CELL / 2;
         drawPacManCharacter(g, pacCx, pacCy, CELL * 0.45);
 
         // --- 6. Ghosts ---
@@ -1173,11 +1207,17 @@
 
     function checkAutoStep() {
         var now = new Date().getTime();
-        if (now - lastStepTime >= getStepIntervalMs()) {
+        var interval = getStepIntervalMs();
+        if (now - lastStepTime >= interval) {
             lastStepTime = now;
             if (stepPacManGame()) {
                 refreshUI();
+                return;
             }
+        }
+        // Between logic steps repaint at ~30 fps; the renderer interpolates.
+        if (animDue(33)) {
+            refreshUI();
         }
     }
 
