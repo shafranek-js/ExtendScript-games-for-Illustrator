@@ -30,7 +30,8 @@
         { file: "Snake.jsx", token: "Snake", title: "Snake", tag: "ARCADE", desc: "3 arena modes, bonuses" },
         { file: "SpaceInvaders.jsx", token: "SpaceInvaders", title: "Space Invaders", tag: "SHOOTER", desc: "5x9 swarm, bunkers, UFO" },
         { file: "BoulderDash.jsx", token: "BoulderDash", title: "Boulder Dash", tag: "LOGIC", desc: "Caves, boulders, diamonds" },
-        { file: "PacMan.jsx", token: "PacMan", title: "Pac-Man", tag: "ARCADE", desc: "Maze and 4 ghosts" }
+        { file: "PacMan.jsx", token: "PacMan", title: "Pac-Man", tag: "ARCADE", desc: "Maze and 4 ghosts" },
+        { file: "LodeRunner.jsx", token: "LodeRunner", title: "Lode Runner", tag: "ARCADE", desc: "150 levels, digging, guards" }
     ];
 
     // ---------------------------------------------------------------- paths
