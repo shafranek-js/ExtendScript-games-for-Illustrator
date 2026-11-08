@@ -219,6 +219,9 @@ check("heartbeatStart generates a well-formed launcher", () => {
     const cs = ps.content;
     assert(cs.indexOf("IntPtr lpClassName") >= 0, "FindWindow must take IntPtr, not string");
     assert(cs.indexOf("StartsWith(title") >= 0, "window fallback must match by prefix");
+    assert(cs.indexOf("if (!IsWindowVisible(hwnd)) return;") >= 0, "hidden window must pause the timer");
+    assert(cs.indexOf("fgPid) return") < 0, "losing focus must NOT stop the timer (background play)");
+    assert(cs.indexOf("inPlayArea && isForeground") >= 0, "cursor nudge must require focus");
 });
 
 check("heartbeatStart rejects non-Windows", () => {

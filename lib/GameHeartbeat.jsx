@@ -69,10 +69,13 @@ function hbBuildCs() {
         "} " +
 
         "public static void Tick(IntPtr hwnd, int toggle) { " +
+        // Keep running while Illustrator is in the background; only stop when
+        // the game window itself is hidden (Illustrator minimised).
+        "if (!IsWindowVisible(hwnd)) return; " +
         "uint winPid = 0, fgPid = 0; " +
         "GetWindowThreadProcessId(hwnd, out winPid); " +
         "GetWindowThreadProcessId(GetForegroundWindow(), out fgPid); " +
-        "if (winPid != 0 && fgPid != 0 && winPid != fgPid) return; " +
+        "bool isForeground = (winPid == 0 || fgPid == 0 || winPid == fgPid); " +
 
         // The game canvas is the only child taller than 200 px: use its screen
         // rectangle as the play area instead of hard-coded layout offsets.
@@ -84,7 +87,9 @@ function hbBuildCs() {
         "} return true; }, IntPtr.Zero); " +
         "bool inPlayArea = (pr.Right > pr.Left) && " +
         "(pt.X >= pr.Left + 4 && pt.X <= pr.Right - 4 && pt.Y >= pr.Top + 4 && pt.Y <= pr.Bottom - 4); " +
-        "if (inPlayArea) { mouse_event(0x0001, 0, (toggle == 0) ? 1 : -1, 0, UIntPtr.Zero); } " +
+        // Nudge the real cursor only when the game window is focused: the 1 px
+        // pulse must never move the pointer while the user works elsewhere.
+        "if (inPlayArea && isForeground) { mouse_event(0x0001, 0, (toggle == 0) ? 1 : -1, 0, UIntPtr.Zero); } " +
 
         "POINT cpt = pt; ScreenToClient(hwnd, ref cpt); " +
         "int mx = inPlayArea ? cpt.X : 0; " +
