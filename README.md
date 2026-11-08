@@ -1,6 +1,6 @@
 # ExtendScript Games for Adobe Illustrator
 
-Seven complete games that run **inside Adobe Illustrator** — pure ExtendScript (ES3) + ScriptUI, drawn pixel by pixel with `ScriptUIGraphics`, no raster assets, no plugins.
+Eight complete games that run **inside Adobe Illustrator** — pure ExtendScript (ES3) + ScriptUI, drawn pixel by pixel with `ScriptUIGraphics`, no raster assets, no plugins.
 
 The games are the visible part. The real subject of this repository is **what the Illustrator scripting engine can actually do**: no timers, no fonts you can trust, no JSON, no frameworks — and still a real-time loop, a vector font renderer, a four-language UI and one-click export of the game scene to an editable artboard.
 
@@ -36,20 +36,21 @@ Every screenshot below is the real ScriptUI window, drawn by the game itself —
 | <img src="screenshots/space-invaders.png" width="150" alt="Space Invaders"> | **Space Invaders**<br>`SpaceInvaders.jsx` | Shooter | 5×9 swarm with two-frame animation, eroding bunkers, mystery UFO |
 | <img src="screenshots/boulder-dash.png" width="150" alt="Boulder Dash"> | **Boulder Dash**<br>`BoulderDash.jsx` | Logic | Cell gravity for boulders and gems, monster AI, 5 hand-built caves |
 | <img src="screenshots/pac-man.png" width="150" alt="Pac-Man"> | **Pac-Man**<br>`PacMan.jsx` | Arcade | 19×21 maze, four ghosts with different personalities, frightened mode |
+| <img src="screenshots/lode-runner.png" width="150" alt="Lode Runner"> | **Lode Runner**<br>`LodeRunner.jsx` | Arcade | 150 authentic levels, laser digging with crumbling bricks, Doug Smith guard AI, Apple II running-bond masonry, retro HUD |
 
 ## Quick start
 
-The launcher is the entry point: one window with all seven games, hotkeys `1`–`7`, a random pick, and shortcuts to the docs, the game folder and the runtime logs.
+The launcher is the entry point: one window with all eight games, hotkeys `1`–`8`, a random pick, and shortcuts to the docs, the game folder and the runtime logs.
 
-<img src="screenshots/launcher.png" width="420" alt="RELAX launcher with the seven games">
+<img src="screenshots/launcher.png" width="420" alt="RELAX launcher with the eight games">
 
 1. Download or clone this repository (**keep the folder intact — the games share `lib/`**).
 2. In Illustrator open `File > Scripts > Other Script…` and pick **`Play Arcade.jsx`**.
-3. Click a game title or press `1`–`7`. Closing a game brings the launcher back.
+3. Click a game title or press `1`–`8`. Closing a game brings the launcher back.
 
-Running a single game directly works too: `File > Scripts > Other Script…` → e.g. `Tetris.jsx`.
+Running a single game directly works too: `File > Scripts > Other Script…` → e.g. `Tetris.jsx` or `LodeRunner.jsx`.
 
-**Controls:** arrows / WASD to move, `Space` for the primary action, `Esc` to close. Mouse steers in Arkanoid and Space Invaders; swipes and clicks work in 2048, Snake, Boulder Dash and Tetris.
+**Controls:** arrows / WASD to move, `Space` for the primary action (`Z` / `X` to dig left / right in Lode Runner), `Esc` to close. Mouse steers in Arkanoid and Space Invaders; swipes and clicks work in 2048, Snake, Boulder Dash and Tetris.
 
 ## How it works
 
@@ -63,10 +64,10 @@ The full engineering notes — including the platform traps that shaped this cod
 ## Repository layout
 
 ```
-Play Arcade.jsx      launcher: menu for all games (1-7, Random, Docs, Logs)
-2048.jsx … Tetris.jsx  seven games
+Play Arcade.jsx      launcher: menu for all games (1-8, Random, Docs, Logs)
+2048.jsx … Tetris.jsx  eight games (including LodeRunner.jsx)
 lib/                 shared engine: drawing core, heartbeat, animation, persistence, i18n, diagnostics
-tools/               static gate, core tests, mechanical refactoring helper
+tools/               static gate, core tests, headless logic/render tests, level importer
 screenshots/         UI captures used in this README
 README.md            this file
 TESTING.md           test plan: coverage matrix, cases A-01 … K-03, acceptance checklist
@@ -78,9 +79,10 @@ LICENSE              MIT
 ## Verification
 
 ```powershell
-node tools/check.js        # ES3 syntax, #include resolution, UTF-8 BOM rules, i18n key parity
-node tools/check.js --fix  # repair BOM problems in place
-node tools/test-core.js    # drawing core, {0} substitution, save parsing, heartbeat generation
+node tools/check.js              # ES3 syntax, #include resolution, UTF-8 BOM rules, i18n key parity
+node tools/check.js --fix        # repair BOM problems in place
+node tools/test-core.js          # drawing core, {0} substitution, save parsing, heartbeat generation
+node tools/loderunner-headless.js # 37 headless tests for Lode Runner mechanics & vector rendering
 ```
 
 Both run on Node alone — Illustrator is not required. The runtime test is manual: see [TESTING.md](TESTING.md) (Smoke run ≈ 25 min, Full run ≈ 2.5 h).
