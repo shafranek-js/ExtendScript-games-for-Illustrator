@@ -50,6 +50,8 @@ The launcher is the entry point: one window with all eight games, hotkeys `1`–
 
 Running a single game directly works too: `File > Scripts > Other Script…` → e.g. `Tetris.jsx` or `LodeRunner.jsx`.
 
+**Standalone single-file builds:** Every game is also available as a self-contained bundle (`*_standalone.jsx`, e.g. `Tetris_standalone.jsx`, `LodeRunner_standalone.jsx`). All `lib/` code is inlined, so each standalone file can be moved anywhere or shared with colleagues without keeping the repository or `lib/` folder next to it.
+
 **Controls:** arrows / WASD to move, `Space` for the primary action (`Z` / `X` to dig left / right in Lode Runner), `Esc` to close. Mouse steers in Arkanoid and Space Invaders; swipes and clicks work in 2048, Snake, Boulder Dash and Tetris.
 
 ## How it works
@@ -64,10 +66,11 @@ The full engineering notes — including the platform traps that shaped this cod
 ## Repository layout
 
 ```
-Play Arcade.jsx      launcher: menu for all games (1-8, Random, Docs, Logs)
-2048.jsx … Tetris.jsx  eight games (including LodeRunner.jsx)
-lib/                 shared engine: drawing core, heartbeat, animation, persistence, i18n, diagnostics
-tools/               static gate, core tests, headless logic/render tests, level importer
+Play Arcade.jsx        launcher: menu for all games (1-8, Random, Docs, Logs)
+2048.jsx … Tetris.jsx  eight modular games (require lib/)
+*_standalone.jsx       eight standalone single-file builds (zero dependencies)
+lib/                   shared engine: drawing core, heartbeat, animation, persistence, i18n, diagnostics
+tools/                 static gate, core tests, headless logic/render tests, level importer, standalone builder
 screenshots/         UI captures used in this README
 README.md            this file
 TESTING.md           test plan: coverage matrix, cases A-01 … K-03, acceptance checklist
@@ -83,6 +86,7 @@ node tools/check.js              # ES3 syntax, #include resolution, UTF-8 BOM ru
 node tools/check.js --fix        # repair BOM problems in place
 node tools/test-core.js          # drawing core, {0} substitution, save parsing, heartbeat generation
 node tools/loderunner-headless.js # 37 headless tests for Lode Runner mechanics & vector rendering
+node tools/make-standalone.js --all # rebuild all 8 standalone single-file bundles
 ```
 
 Both run on Node alone — Illustrator is not required. The runtime test is manual: see [TESTING.md](TESTING.md) (Smoke run ≈ 25 min, Full run ≈ 2.5 h).
