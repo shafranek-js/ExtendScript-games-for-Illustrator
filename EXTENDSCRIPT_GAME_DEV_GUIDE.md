@@ -131,6 +131,18 @@ Module API: `heartbeatSupported()`, `heartbeatStart(cfg)`, `heartbeatStop()`, `h
 
 **Important:** the logic step is fixed (an object moves a fixed number of pixels/cells per step), so the actual speed depends on the event rate. If you need independence from CPU load, accumulate `dt` and do `while (acc >= 16.7 && steps < 3) { step(); acc -= 16.7; }`.
 
+### Timer Resolution: Why `tickMs: 16` Really Sleeps ~31 ms
+
+`Start-Sleep -Milliseconds` rounds the request up to the system timer, which is 15.6 ms by default. Measured on this machine: `tickMs: 16` and `tickMs: 25` both give a **~31 ms** period, `tickMs: 35` gives ~47 ms. Asking for a smaller number changes nothing.
+
+Raising the resolution to 1 ms makes the request real:
+
+```js
+heartbeatStart({ token: "Platformer", title: WIN_TITLE, tickMs: 16, highRes: true });
+```
+
+`highRes` is **off by default and must stay that way** for the shipped games: their logic step is fixed (see the warning above), so a faster pulse silently changes their speed. Opt in only when the game's step is driven by elapsed time — an accumulated `dt` (like the platformer) or a `now - lastStep >= N` gate. The generated script raises the resolution with `timeBeginPeriod(1)` and always restores it in a `finally` block; if the process is killed, Windows reverts the resolution when the process exits.
+
 ### Synthetic Mouse Event Contract
 The pulse contains three signals:
 1. `PostMessage(hwnd, 0x0200, 0, lp)` — `WM_MOUSEMOVE` to the window, where `lp` contains the **real client coordinates of the cursor**;

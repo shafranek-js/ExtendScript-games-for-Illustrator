@@ -222,6 +222,26 @@ check("heartbeatStart generates a well-formed launcher", () => {
     assert(cs.indexOf("fgPid) return") < 0, "losing focus must NOT stop the timer (background play)");
     assert(cs.indexOf("!IsWindowVisible(hwnd)) return") < 0, "visibility must not gate the pulse - it silently kills the timer");
     assert(cs.indexOf("inPlayArea && isForeground") >= 0, "cursor nudge must require focus");
+    assert(ps.content.indexOf("::timeBeginPeriod(1)") < 0, "default games must not change the system timer");
+});
+
+check("highRes asks for the 1 ms timer and restores it", () => {
+    FakeFile.created = [];
+    const ok = lib.heartbeatStart({ title: "PLATFORMER", token: "Platformer", tickMs: 16, highRes: true });
+    assert(ok === true, "heartbeatStart returned " + ok);
+
+    const ps = FakeFile.created.find((f) => /_Heartbeat\.ps1$/.test(f.path));
+    assert(ps, "ps1 not created");
+    assert(ps.content.indexOf("[Win32Heartbeat]::timeBeginPeriod(1)") >= 0, "highRes must raise the timer resolution");
+    assert(ps.content.indexOf("[Win32Heartbeat]::timeEndPeriod(1)") >= 0, "the timer resolution must be restored");
+    assert(ps.content.indexOf("} finally {") >= 0, "the pulse loop must be wrapped in try/finally");
+    assert(ps.content.indexOf("Start-Sleep -Milliseconds 16") >= 0, "tickMs not passed");
+
+    // The loop has to live inside the try block, not after it.
+    const tryAt = ps.content.indexOf("try {");
+    const loopAt = ps.content.indexOf("while ([Win32Heartbeat]::IsWindow");
+    const finallyAt = ps.content.indexOf("} finally {");
+    assert(tryAt < loopAt && loopAt < finallyAt, "pulse loop is not inside try/finally");
 });
 
 check("heartbeatStart rejects non-Windows", () => {

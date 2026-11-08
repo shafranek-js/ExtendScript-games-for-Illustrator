@@ -125,6 +125,7 @@ Priorities: **P0** — blocks acceptance, **P1** — required, **P2** — if pos
 | D-06 | Space Invaders: move the cursor onto a button/outside the field | The cannon does not jump; buttons click normally | P1 |
 | D-07 | Alt-Tab to another application for 5 s, then return | The game **keeps running** in the background (objects move); the cursor in the other window does not jitter; no time "jump" on return | P1 |
 | D-07b | Minimize Illustrator for 10 s, then restore it | The timer keeps pulsing (no visibility gate in `Tick`), the game has moved on; background CPU usage is expected | P1 |
+| D-08 | Launch a game that passes `highRes: true`, then a default one | `AI_<Token>_Heartbeat.ps1` for the first contains `timeBeginPeriod(1)`, the pulse loop inside `try`, and `timeEndPeriod(1)` in `finally`; the second contains no `::timeBeginPeriod(1)`. After closing both, no `powershell.exe` and no `AI_*_Launcher.vbs` remain | P2 |
 | D-08 | Click the buttons while the cursor is over the field | All buttons respond (the cursor is not captured by the timer) | P1 |
 | D-09 | 2048/Snake/Boulder/Tetris: swipe or click on the field | The gesture works (according to the rules of the specific game) | P1 |
 

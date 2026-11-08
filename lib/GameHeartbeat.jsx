@@ -68,6 +68,8 @@ function hbBuildCs() {
         "return found; " +
         "} " +
 
+        "[DllImport(\"winmm.dll\")] public static extern uint timeBeginPeriod(uint uPeriod); " +
+        "[DllImport(\"winmm.dll\")] public static extern uint timeEndPeriod(uint uPeriod); " +
         "public static void Tick(IntPtr hwnd, int toggle) { " +
         // Keep running while Illustrator is in the background: losing focus must
         // not stop the game, otherwise a player who switched to another app for
@@ -139,6 +141,29 @@ function heartbeatStart(cfg) {
         var stopPath = stopFile.fsName.replace(/\\/g, "\\\\");
         var titlePs = title.replace(/'/g, "''");
 
+        var whileHead = "while ([Win32Heartbeat]::IsWindow($hwnd) -and -not [System.IO.File]::Exists('" + stopPath + "')) {\r\n";
+        var loopBody =
+            "    [Win32Heartbeat]::Tick($hwnd, $t)\r\n" +
+            "    $t = 1 - $t\r\n" +
+            "    Start-Sleep -Milliseconds " + tickMs + "\r\n";
+
+        // Start-Sleep rounds up to the 15.6 ms system timer, so a 16 ms request
+        // really sleeps ~31 ms. Opting in to the 1 ms timer makes the interval real.
+        // Games whose step is driven by elapsed time must opt in; games that step
+        // once per event would change speed, so the default stays untouched.
+        var loopScript;
+        if (cfg.highRes === true) {
+            loopScript =
+                "try {\r\n" +
+                "    [Win32Heartbeat]::timeBeginPeriod(1)\r\n" +
+                "    " + whileHead + loopBody + "    }\r\n" +
+                "} finally {\r\n" +
+                "    [Win32Heartbeat]::timeEndPeriod(1)\r\n" +
+                "}\r\n";
+        } else {
+            loopScript = whileHead + loopBody + "}\r\n";
+        }
+
         var psScript =
             "$ErrorActionPreference = 'SilentlyContinue'\r\n" +
             "Add-Type -TypeDefinition '" + hbBuildCs() + "'\r\n" +
@@ -150,11 +175,7 @@ function heartbeatStart(cfg) {
             "}\r\n" +
             "if ($hwnd -eq [IntPtr]::Zero) { exit }\r\n" +
             "$t = 0\r\n" +
-            "while ([Win32Heartbeat]::IsWindow($hwnd) -and -not [System.IO.File]::Exists('" + stopPath + "')) {\r\n" +
-            "    [Win32Heartbeat]::Tick($hwnd, $t)\r\n" +
-            "    $t = 1 - $t\r\n" +
-            "    Start-Sleep -Milliseconds " + tickMs + "\r\n" +
-            "}\r\n";
+            loopScript;
 
         if (!psFile.open("w")) {
             _hbError = "cannot-write-ps1";
