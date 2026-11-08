@@ -124,7 +124,7 @@ Priorities: **P0** — blocks acceptance, **P1** — required, **P2** — if pos
 | D-05 | Space Invaders: move the mouse over the field | The cannon follows; it does not jerk when controlled by keyboard | P0 |
 | D-06 | Space Invaders: move the cursor onto a button/outside the field | The cannon does not jump; buttons click normally | P1 |
 | D-07 | Alt-Tab to another application for 5 s, then return | The game **keeps running** in the background (objects move); the cursor in the other window does not jitter; no time "jump" on return | P1 |
-| D-07b | Minimize Illustrator for 10 s, then restore it | The timer is paused (the window is invisible) and CPU is not consumed; the game continues after restore | P1 |
+| D-07b | Minimize Illustrator for 10 s, then restore it | The timer keeps pulsing (no visibility gate in `Tick`), the game has moved on; background CPU usage is expected | P1 |
 | D-08 | Click the buttons while the cursor is over the field | All buttons respond (the cursor is not captured by the timer) | P1 |
 | D-09 | 2048/Snake/Boulder/Tetris: swipe or click on the field | The gesture works (according to the rules of the specific game) | P1 |
 

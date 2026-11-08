@@ -93,9 +93,11 @@ When the window opens (`win.onShow`), the script generates a micro PowerShell sc
 
 Every `25–40 ms` the background process checks whether the game window still exists and sends it a "pulse" of events that wakes the Illustrator JS engine. When the player closes the window (`win.onClose`), the loop terminates instantly.
 
-**Background behavior.** The game continues even if Illustrator is minimized behind another window: it must not stop on focus loss, otherwise a player who switches to another program for a minute returns to a "frozen" game. The timer stops only when the game window is invisible (Illustrator is minimized) — `if (!IsWindowVisible(hwnd)) return;`.
+**Background behavior.** The game continues even if Illustrator is minimized behind another window: it must not stop on focus loss, otherwise a player who switches to another program for a minute returns to a "frozen" game.
 
 At the same time, the tiny cursor shift (`mouse_event`) is performed **only when the game window is focused**: otherwise the pulse would jostle the pointer while you work in another application. Engine wake-up (`WM_MOUSEMOVE` + `F15`) always happens.
+
+Do not add an `IsWindowVisible(hwnd)` guard to `Tick`. It looks like a sensible "pause while minimized" feature, but it silently kills the timer on some ScriptUI windows and the game freezes with no error anywhere — the failures then look like a zombie process with no events.
 
 The game hooks this up with two handlers:
 

@@ -69,9 +69,9 @@ function hbBuildCs() {
         "} " +
 
         "public static void Tick(IntPtr hwnd, int toggle) { " +
-        // Keep running while Illustrator is in the background; only stop when
-        // the game window itself is hidden (Illustrator minimised).
-        "if (!IsWindowVisible(hwnd)) return; " +
+        // Keep running while Illustrator is in the background: losing focus must
+        // not stop the game, otherwise a player who switched to another app for
+        // a minute comes back to a frozen window.
         "uint winPid = 0, fgPid = 0; " +
         "GetWindowThreadProcessId(hwnd, out winPid); " +
         "GetWindowThreadProcessId(GetForegroundWindow(), out fgPid); " +
