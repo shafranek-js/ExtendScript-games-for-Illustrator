@@ -3,7 +3,7 @@
 /**
  * RELAX - Arcade Launcher for Adobe Illustrator (ExtendScript / ScriptUI)
  *
- * One window for all seven games in this folder. Click a title or press 1-7.
+ * One window for all eight games in this folder. Click a title or press 1-8.
  * When a game window is closed the launcher comes back, so you can play the
  * next one without touching File > Scripts again.
  *
@@ -207,7 +207,7 @@
         var titleFont = makeFont(22, "BOLD");
         if (titleFont) title.graphics.font = titleFont;
 
-        var sub = win.add("statictext", undefined, "Seven games inside Illustrator - click a title or press 1-7");
+        var sub = win.add("statictext", undefined, "Eight games inside Illustrator - click a title or press 1-8");
         sub.graphics.foregroundColor = mutedPen;
         win.add("panel").preferredSize = [440, 1];
 
