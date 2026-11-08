@@ -1,58 +1,58 @@
-# План тестирования relax (Illustrator ExtendScript)
+# relax Test Plan (Illustrator ExtendScript)
 
-Документ описывает, как проверить игры после рефакторинга (вынос `lib/`, единый heartbeat, ленивое сохранение, лаунчер) и что считать приёмкой.
+This document explains how to verify the games after the refactoring (extraction into `lib/`, unified heartbeat, lazy saving, launcher) and what constitutes acceptance.
 
-- **Проверяемый объём:** 7 игр (`2048`, `Tetris`, `Arkanoid`, `Snake`, `SpaceInvaders`, `BoulderDash`, `PacMan`), `Play Arcade.jsx`, `lib/*.jsx`, документация.
-- **Вне объёма:** баланс геймплея, качество арта, поддержка macOS сверх «не падает и сообщает», другие ОС, сети/лицензии.
-- **Ключевой риск релиза:** смена контракта heartbeat (реальные координаты вместо констант) и определение игрового поля по дочернему окну. Поэтому Arkanoid и Space Invaders тестируются первыми и глубже остальных.
+- **In scope:** 7 games (`2048`, `Tetris`, `Arkanoid`, `Snake`, `SpaceInvaders`, `BoulderDash`, `PacMan`), `Play Arcade.jsx`, `lib/*.jsx`, documentation.
+- **Out of scope:** gameplay balance, art quality, macOS support beyond "does not crash and reports an error", other OSes, networks/licenses.
+- **Key release risk:** the heartbeat contract change (real coordinates instead of constants) and game-field detection via the child window. Therefore Arkanoid and Space Invaders are tested first and more thoroughly than the rest.
 
 ---
 
-## 1. Уровни тестирования
+## 1. Testing Levels
 
-| Уровень | Что покрывает | Исполнение |
+| Level | Coverage | Execution |
 |---|---|---|
-| **A. Статика** | синтаксис, ES3, `#include`, BOM, i18n-ключи, дубли | авто (`check.js`) |
-| **A2. Ядро** | геометрия, подстановки, парсинг сейвов, генерация `.ps1` | авто (`test-core.js`) |
-| **B. Запуск** | лаунчер, прямые запуски, отсутствие `lib/` | вручную |
-| **C. Смоук** | игра открывается, рисуется, управляется, закрывается | вручную |
-| **D. Управление** | клавиатура, мышь, автономный ход, фокус | вручную |
-| **E. Локализация** | 4 языка × 7 игр | вручную |
-| **F. Сохранения** | настройки, состояние партии, совместимость | вручную |
-| **G. Экспорт** | `❖ To Artboard` | вручную |
-| **H. Производительность** | частота записи на диск, CPU, отзывчивость | вручную + PowerShell |
-| **I. Отказоустойчивость** | нет `lib/`, убит таймер, битый сейв, чужое окно | вручную |
-| **J. Регресс** | сравнение с `_baseline_20261107/` | вручную |
-| **K. Уборка** | процессы, temp-файлы | PowerShell |
+| **A. Static** | syntax, ES3, `#include`, BOM, i18n keys, duplicates | automated (`check.js`) |
+| **A2. Core** | geometry, substitutions, save parsing, `.ps1` generation | automated (`test-core.js`) |
+| **B. Launch** | launcher, direct launches, missing `lib/` | manual |
+| **C. Smoke** | game opens, renders, responds to input, closes | manual |
+| **D. Controls** | keyboard, mouse, autonomous motion, focus | manual |
+| **E. Localization** | 4 languages × 7 games | manual |
+| **F. Saves** | settings, game state, compatibility | manual |
+| **G. Export** | `❖ To Artboard` | manual |
+| **H. Performance** | disk write frequency, CPU, responsiveness | manual + PowerShell |
+| **I. Resilience** | missing `lib/`, killed timer, corrupt save, foreign window | manual |
+| **J. Regression** | comparison with `_baseline_20261107/` | manual |
+| **K. Cleanup** | processes, temp files | PowerShell |
 
-## 2. Прогоны
+## 2. Runs
 
-| Прогон | Состав | Время |
+| Run | Scope | Time |
 |---|---|---|
-| **Smoke** | A, A2, B-01…B-04, C по всем 7, K | ~25 мин |
-| **Full** | всё, что ниже | ~2,5 ч |
-| **Регресс перед выкладкой** | Smoke + D (Arkanoid/SpaceInvaders), F-05, J |
+| **Smoke** | A, A2, B-01…B-04, C for all 7, K | ~25 min |
+| **Full** | everything below | ~2.5 h |
+| **Pre-release regression** | Smoke + D (Arkanoid/SpaceInvaders), F-05, J |
 
-## 3. Окружения и данные
+## 3. Environments and Data
 
-**Минимальная матрица окружений**
+**Minimum environment matrix**
 
-| Параметр | Значения |
+| Parameter | Values |
 |---|---|
-| Illustrator | 2026 (основное), 2021 (минимальное из установленных) |
-| Масштаб Windows | 100 %, 125 % (проверить зону клика и размеры окна) |
-| Мониторы | один; два (второй — с другим DPI) |
-| Состояние `%TEMP%` | чистый; после десятка запусков |
+| Illustrator | 2026 (primary), 2021 (minimum installed) |
+| Windows scaling | 100 %, 125 % (check click area and window size) |
+| Monitors | one; two (second with a different DPI) |
+| `%TEMP%` state | clean; after a dozen launches |
 
-**Тестовые состояния данных**
+**Test data states**
 
-1. **Clean** — ни одного сейва: удалить `AI_*_SaveData.txt` в `Folder.userData`.
-2. **Legacy** — сейв, созданный старой версией: запустить игры из `_baseline_20261107/` (локальный снимок, в репозиторий не входит), поиграть, закрыть.
-3. **Corrupt** — сейв с обрезанным содержимым (только `lang=`).
-4. **No-lib** — временно переименовать `lib` в `lib_off`.
-5. **Foreign window** — открытый Блокнот с файлом `SNAKE - Adobe Illustrator Edition.txt` (проверка поиска окна).
+1. **Clean** — no saves: delete `AI_*_SaveData.txt` in `Folder.userData`.
+2. **Legacy** — save created by an older version: launch the games from `_baseline_20261107/` (local snapshot, not in the repository), play, and close.
+3. **Corrupt** — save with truncated contents (only `lang=`).
+4. **No-lib** — temporarily rename `lib` to `lib_off`.
+5. **Foreign window** — Notepad open with `SNAKE - Adobe Illustrator Edition.txt` (window lookup test).
 
-Путь к сейвам узнаётся одноразовым скриптом:
+The save path can be found with a one-off script:
 
 ```javascript
 #target illustrator
@@ -61,144 +61,144 @@ alert(Folder.userData.fsName);
 
 ---
 
-## 4. Матрица покрытия
+## 4. Coverage Matrix
 
-| Проверка | 2048 | Tetris | Arkanoid | Snake | Invaders | Boulder | PacMan |
+| Check | 2048 | Tetris | Arkanoid | Snake | Invaders | Boulder | PacMan |
 |---|---|---|---|---|---|---|---|
-| C — смоук | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| D — клавиатура | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| D — мышь | ✓ | ✓ | ✓ | ✓ | ✓ | — | — |
-| D — автономный ход | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| E — 4 языка | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| F — настройки | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| F — состояние партии | ✓ | ✓ | — | — | — | — | — |
-| G — экспорт | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| H — запись сейва | — | ✓ | — | — | — | — | — |
+| C — smoke | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| D — keyboard | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| D — mouse | ✓ | ✓ | ✓ | ✓ | ✓ | — | — |
+| D — autonomous motion | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| E — 4 languages | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| F — settings | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| F — game state | ✓ | ✓ | — | — | — | — | — |
+| G — export | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| H — save writes | — | ✓ | — | — | — | — | — |
 
-`—` в строке «автономный ход» у 2048 — это ожидаемое поведение: игра пошаговая.
+The `—` in the "autonomous motion" row for 2048 is expected behavior: the game is turn-based.
 
 ---
 
-## 5. Тест-кейсы
+## 5. Test Cases
 
-Приоритеты: **P0** — блокирует приёмку, **P1** — обязателен, **P2** — по возможности.
+Priorities: **P0** — blocks acceptance, **P1** — required, **P2** — if possible.
 
-### A. Автоматические
+### A. Automated
 
-| ID | Шаги | Ожидаемо | P |
+| ID | Steps | Expected | P |
 |---|---|---|---|
-| A-01 | `node tools/check.js` | `checked: 8 scripts, 4 lib files (7 scripts use #include)` и `OK`, без WARN | P0 |
+| A-01 | `node tools/check.js` | `checked: 8 scripts, 4 lib files (7 scripts use #include)` and `OK`, no WARN | P0 |
 | A-02 | `node tools/test-core.js` | `16/16 passed` | P0 |
-| A-03 | Добавить в конец любой игры `var x = 1; x.forEach(...)`; прогнать `check.js`; убрать правку | `ERROR … ES5+ construct: Array#forEach`, exit code 1 | P1 |
+| A-03 | Append `var x = 1; x.forEach(...)` to the end of any game; run `check.js`; revert the change | `ERROR … ES5+ construct: Array#forEach`, exit code 1 | P1 |
 
-### B. Запуск
+### B. Launch
 
-| ID | Шаги | Ожидаемо | P |
+| ID | Steps | Expected | P |
 |---|---|---|---|
-| B-01 | `File > Scripts > Other Script…` → `Play Arcade.jsx` | Окно «RELAX», 7 строк, у каждой номер, жанр и описание | P0 |
-| B-02 | Нажать `1` в меню, поиграть, закрыть игру | Запускается 2048; после закрытия её окна меню лаунчера возвращается; `Esc` в меню — полный выход | P0 |
-| B-03 | `File > Scripts > Other Script…` → `Tetris.jsx` (напрямую) | Игра запускается без лаунчера | P0 |
-| B-04 | Переименовать `lib` → `lib_off`; запустить лаунчер, выбрать игру | Понятное сообщение `Missing #include file(s)`; лаунчер не падает. Вернуть `lib` | P0 |
-| B-05 | То же без `lib`, но запустить `Tetris.jsx` напрямую | Ошибка ExtendScript с указанием на `#include` (ожидаемо); после возврата `lib` всё работает | P1 |
-| B-06 | Скопировать папку `relax` в путь с пробелами и в папку с кириллицей, запустить лаунчер оттуда | Игры запускаются, `#include` находится | P2 |
-| B-07 | В лаунчере: `★ Random` | Запускается любая из 7 игр | P1 |
-| B-08 | В лаунчере: `Folder`, `❖ Docs`, `Close (Esc)` | Открывается папка / README / окно закрывается | P2 |
+| B-01 | `File > Scripts > Other Script…` → `Play Arcade.jsx` | "RELAX" window, 7 rows, each with a number, genre, and description | P0 |
+| B-02 | Press `1` in the menu, play, close the game | 2048 launches; after its window closes, the launcher menu returns; `Esc` in the menu exits completely | P0 |
+| B-03 | `File > Scripts > Other Script…` → `Tetris.jsx` (directly) | The game launches without the launcher | P0 |
+| B-04 | Rename `lib` → `lib_off`; launch the launcher and select a game | A clear `Missing #include file(s)` message; the launcher does not crash. Restore `lib` afterward | P0 |
+| B-05 | Same without `lib`, but launch `Tetris.jsx` directly | ExtendScript error pointing at `#include` (expected); after `lib` is restored, everything works | P1 |
+| B-06 | Copy the `relax` folder to a path with spaces and to a folder with Cyrillic characters, then launch the launcher from there | Games launch and `#include` resolves | P2 |
+| B-07 | In the launcher: `★ Random` | Any of the 7 games launches | P1 |
+| B-08 | In the launcher: `Folder`, `❖ Docs`, `Close (Esc)` | The folder opens; the README opens; the window closes | P2 |
 
-### C. Смоук (для каждой игры)
+### C. Smoke (for each game)
 
-| ID | Шаги | Ожидаемо | P |
+| ID | Steps | Expected | P |
 |---|---|---|---|
-| C-01 | Запустить игру | Окно открылось, поле и HUD нарисованы, статус «готов», без исключений | P0 |
-| C-02 | Внимательно посмотреть на канвас | Нет обрезанных/съехавших цифр и надписей, нет пустых плашек `□` | P0 |
-| C-03 | Сравнить размер окна с прогоном из `_baseline_20261107/` | Совпадает (геометрия игры не менялась) | P1 |
-| C-04 | Закрыть крестиком, затем запустить заново и закрыть кнопкой `Close` | Оба способа работают, окно не «залипает» | P0 |
+| C-01 | Launch the game | The window opens, the field and HUD are rendered, status is "ready", and there are no exceptions | P0 |
+| C-02 | Look closely at the canvas | No clipped or misaligned digits or labels; no empty `□` placeholders | P0 |
+| C-03 | Compare the window size with the run from `_baseline_20261107/` | It matches (game geometry has not changed) | P1 |
+| C-04 | Close with the X button, then launch again and close with the `Close` button | Both methods work and the window does not get stuck | P0 |
 
-### D. Управление
+### D. Controls
 
-| ID | Шаги | Ожидаемо | P |
+| ID | Steps | Expected | P |
 |---|---|---|---|
-| D-01 | Клавиши из подсказки (стрелки/WASD/`Space`/спец) | Все действия срабатывают, без двойных срабатываний | P0 |
-| D-02 | Не трогать мышь и клавиатуру 10 с | Игра продолжает жить (кроме 2048) | P0 |
-| D-03 | Arkanoid: водить мышью над полем | Ракетка следует плавно, **без рывков к центру и без дрожания** | P0 |
-| D-04 | Arkanoid: не трогать мышь, играть клавишами `A`/`D` | Ракетка не «уезжает» от движения клавишами | P0 |
-| D-05 | Space Invaders: водить мышью над полем | Пушка следует; при управлении клавишами не дёргается | P0 |
-| D-06 | Space Invaders: увести курсор на кнопку/вне поля | Пушка не прыгает; кнопки нажимаются нормально | P1 |
-| D-07 | Alt-Tab в другое приложение на 5 с, вернуться | Игра **продолжает идти** в фоне (объекты двигаются), курсор в другом окне не дёргается; при возврате без «прыжка» времени | P1 |
-| D-07b | Свернуть Illustrator на 10 с, развернуть | Таймер приостановлен (окно невидимо), CPU не расходуется; после разворота игра продолжается | P1 |
-| D-08 | Клик по кнопкам при курсоре над полем | Все кнопки нажимаются (курсор не «съедается» таймером) | P1 |
-| D-09 | 2048/Snake/Boulder/Tetris: свайп или клик по полю | Жест срабатывает (по правилам конкретной игры) | P1 |
+| D-01 | Keys listed in the hint (arrows/WASD/`Space`/special keys) | All actions work, with no double triggers | P0 |
+| D-02 | Do not touch the mouse or keyboard for 10 s | The game keeps running (except 2048) | P0 |
+| D-03 | Arkanoid: move the mouse over the field | The paddle follows smoothly, **with no jerks toward the center and no jitter** | P0 |
+| D-04 | Arkanoid: do not touch the mouse; play with the `A`/`D` keys | The paddle does not drift when controlled with the keys | P0 |
+| D-05 | Space Invaders: move the mouse over the field | The cannon follows; it does not jerk when controlled by keyboard | P0 |
+| D-06 | Space Invaders: move the cursor onto a button/outside the field | The cannon does not jump; buttons click normally | P1 |
+| D-07 | Alt-Tab to another application for 5 s, then return | The game **keeps running** in the background (objects move); the cursor in the other window does not jitter; no time "jump" on return | P1 |
+| D-07b | Minimize Illustrator for 10 s, then restore it | The timer is paused (the window is invisible) and CPU is not consumed; the game continues after restore | P1 |
+| D-08 | Click the buttons while the cursor is over the field | All buttons respond (the cursor is not captured by the timer) | P1 |
+| D-09 | 2048/Snake/Boulder/Tetris: swipe or click on the field | The gesture works (according to the rules of the specific game) | P1 |
 
-### E. Локализация и кодировка (7 игр × 4 языка)
+### E. Localization and Encoding (7 games × 4 languages)
 
-| ID | Шаги | Ожидаемо | P |
+| ID | Steps | Expected | P |
 |---|---|---|---|
-| E-00 | Запустить любую игру и прочитать заголовок окна и подписи | `2048 • Adobe Illustrator Edition`, `◄ A`, `•`, `Čeština`, `Română`, `हिन्दी` — без `â€¢`, `ÄŒ`, `RomÃ¢nÄƒ`, `à¤¹à¤¿`. Если есть — потерян BOM: `node tools/check.js --fix` | P0 |
-| E-01 | Переключить `English / Čeština / Română / हिन्दी` | Кнопки, подсказка и статус переводятся; заголовок окна остаётся английским | P1 |
-| E-02 | В каждом языке посмотреть футер статуса | Текст не обрезан «…», нет `undefined`, нет квадратов | P1 |
-| E-03 | В `हिन्दी` и `Čeština` проверить подсказку управления и кнопки | Диакритика и деванагари отображаются корректно | P0 |
-| E-04 | Выбрать язык, закрыть, открыть заново | Язык сохранился | P1 |
+| E-00 | Launch any game and read the window title and labels | `2048 • Adobe Illustrator Edition`, `◄ A`, `•`, `Čeština`, `Română`, `हिन्दी` — with no `â€¢`, `ÄŒ`, `RomÃ¢nÄƒ`, `à¤¹à¤¿`. If any appear, the BOM is missing: `node tools/check.js --fix` | P0 |
+| E-01 | Switch between `English / Čeština / Română / हिन्दी` | Buttons, hint, and status are translated; the window title remains in English | P1 |
+| E-02 | In each language, inspect the status footer | Text is not truncated with "…", there is no `undefined`, and there are no squares | P1 |
+| E-03 | In `हिन्दी` and `Čeština`, check the control hint and buttons | Diacritics and Devanagari render correctly | P0 |
+| E-04 | Select a language, close, and reopen | The language is preserved | P1 |
 
-### F. Сохранения
+### F. Saves
 
-| ID | Шаги | Ожидаемо | P |
+| ID | Steps | Expected | P |
 |---|---|---|---|
-| F-01 | Удалить все `AI_*_SaveData.txt`, запустить игру | Дефолты: EN, тёмная тема, рекорд 0 | P0 |
-| F-02 | Сменить язык и тему, закрыть, открыть | Восстановились | P0 |
-| F-03 | Tetris: поиграть 30 с, поставить фигуру, закрыть, открыть | Поле, счёт, линии, уровень и текущая фигура восстановлены; статус «Game restored» | P0 |
-| F-04 | Tetris: довести до Game Over, закрыть, открыть | Новая игра (партия не восстанавливается), рекорд сохранён | P1 |
-| F-05 | **Совместимость:** запустить `_baseline_20261107/Tetris.jsx`, поиграть, закрыть; затем новую версию | Новая версия читает старый сейв без ошибок (имена файлов и ключи не менялись) | P0 |
-| F-06 | То же для 2048 | Старый сейв читается, поле восстанавливается | P0 |
-| F-07 | Обрезать сейв до `lang=cs`, запустить | Игра стартует как с чистого листа, без исключения | P1 |
-| F-08 | Сделать сейв read-only, поиграть | Игра не падает, изменения не сохраняются | P2 |
+| F-01 | Delete all `AI_*_SaveData.txt`, launch a game | Defaults: EN, dark theme, high score 0 | P0 |
+| F-02 | Change the language and theme, close, and reopen | They are restored | P0 |
+| F-03 | Tetris: play for 30 s, place a piece, close, and reopen | The field, score, lines, level, and current piece are restored; status is "Game restored" | P0 |
+| F-04 | Tetris: play until Game Over, close, and reopen | A new game starts (the session is not restored), and the high score is preserved | P1 |
+| F-05 | **Compatibility:** launch `_baseline_20261107/Tetris.jsx`, play, and close; then launch the new version | The new version reads the old save without errors (file names and keys are unchanged) | P0 |
+| F-06 | Same for 2048 | The old save is read and the field is restored | P0 |
+| F-07 | Truncate the save to `lang=cs`, then launch | The game starts from a clean slate, without an exception | P1 |
+| F-08 | Make the save read-only, then play | The game does not crash; changes are not saved | P2 |
 
-### G. Экспорт на артборд
+### G. Artboard Export
 
-| ID | Шаги | Ожидаемо | P |
+| ID | Steps | Expected | P |
 |---|---|---|---|
-| G-01 | Документ не открыт → `❖ To Artboard` | Создаётся новый документ, объекты появляются на активной монтажной области | P0 |
-| G-02 | Открытый RGB-документ → экспорт | Появляется слой с ожидаемым именем и группой; картинка не перевёрнута | P0 |
-| G-03 | Экспорт в CMYK-документе | Без ошибки, цвета конвертируются | P1 |
-| G-04 | Экспорт дважды | Вторая группа добавляется в тот же слой, ошибок нет | P2 |
+| G-01 | No document open → `❖ To Artboard` | A new document is created, and objects appear on the active artboard | P0 |
+| G-02 | Open an RGB document → export | A layer with the expected name appears, containing a group; the image is not flipped | P0 |
+| G-03 | Export in a CMYK document | No error; colors are converted | P1 |
+| G-04 | Export twice | The second group is added to the same layer, with no errors | P2 |
 
-### H. Производительность
+### H. Performance
 
-| ID | Шаги | Ожидаемо | P |
+| ID | Steps | Expected | P |
 |---|---|---|---|
-| H-01 | Tetris: играть 30 с, параллельно смотреть `LastWriteTime` сейва | ≤ 4 записи за 10 с (было ~16/с) | P1 |
-| H-02 | Любая динамичная игра: 1 мин простоя | CPU Illustrator не «в потолок», окно отзывается | P1 |
-| H-03 | Задержка ввода | Нажатие отражается без заметной паузы | P1 |
+| H-01 | Tetris: play for 30 s while monitoring the save's `LastWriteTime` | ≤ 4 writes per 10 s (previously ~16/s) | P1 |
+| H-02 | Any dynamic game: 1 min idle | Illustrator CPU is not maxed out; the window stays responsive | P1 |
+| H-03 | Input latency | A keypress is reflected without a noticeable pause | P1 |
 
-Команда для H-01:
+Command for H-01:
 
 ```powershell
 $f = "<Folder.userData>\AI_Tetris_SaveData.txt"
 1..10 | ForEach-Object { (Get-Item $f).LastWriteTime; Start-Sleep 1 }
 ```
 
-### I. Отказоустойчивость
+### I. Resilience
 
-| ID | Шаги | Ожидаемо | P |
+| ID | Steps | Expected | P |
 |---|---|---|---|
-| I-01 | Запустить игру, в Диспетчере задач снять `powershell.exe` с `AI_*_Heartbeat.ps1` | Игра перестаёт двигаться сама, но клавиши/мышь работают; повторный запуск игры снова включает таймер | P1 |
-| I-02 | Открыть Блокнот с файлом `SNAKE - Adobe Illustrator Edition.txt`, запустить Snake | Игра работает (точное совпадение заголовка выигрывает), в Блокнот ничего не «печатается» | P1 |
-| I-03 | Сохранить документ как `Tetris.ai`, запустить Tetris, не двигать мышь над холстом Illustrator | Пульс привязан к окну игры; курсор не дрожит на холсте документа | P2 |
-| I-04 | Игра во время модального диалога Illustrator (например, открыт `Save As`) | Игра не получает фокус; после закрытия диалога продолжает работать | P2 |
+| I-01 | Launch a game, then end the `powershell.exe` process running `AI_*_Heartbeat.ps1` in Task Manager | The game stops moving on its own, but the keyboard/mouse still work; relaunching the game re-enables the timer | P1 |
+| I-02 | Open Notepad with `SNAKE - Adobe Illustrator Edition.txt`, then launch Snake | The game works (the exact title match wins), and nothing is "typed" into Notepad | P1 |
+| I-03 | Save the document as `Tetris.ai`, launch Tetris, and do not move the mouse over the Illustrator canvas | The heartbeat is bound to the game window; the cursor does not jitter on the document canvas | P2 |
+| I-04 | Run a game while a modal Illustrator dialog is open (for example, `Save As`) | The game does not receive focus; it keeps working after the dialog is closed | P2 |
 
-### J. Регресс относительно baseline
+### J. Regression Against Baseline
 
-| ID | Шаги | Ожидаемо | P |
+| ID | Steps | Expected | P |
 |---|---|---|---|
-| J-01 | По очереди запустить 7 игр из `_baseline_20261107/` и 7 новых | Все 14 запускаются; новые окна не отличаются по размеру | P0 |
-| J-02 | Сравнить скриншоты HUD/поля (содержимое случайно — сверять геометрию и цвета) | Совпадение по компоновке и палитре | P1 |
-| J-03 | Сравнить статус-строки и подсказки | Тексты не изменились (кроме нового `statusNoHeartbeat`, который не должен появляться на Windows) | P1 |
+| J-01 | Launch the 7 games from `_baseline_20261107/` and the 7 new games one by one | All 14 launch; the new windows do not differ in size | P0 |
+| J-02 | Compare HUD/field screenshots (content is random — compare geometry and colors) | Layout and palette match | P1 |
+| J-03 | Compare status lines and hints | Texts are unchanged (except the new `statusNoHeartbeat`, which should not appear on Windows) | P1 |
 
-### K. Уборка
+### K. Cleanup
 
-| ID | Шаги | Ожидаемо | P |
+| ID | Steps | Expected | P |
 |---|---|---|---|
-| K-01 | Закрыть игру → проверить процессы | Нет `powershell.exe` с `AI_*_Heartbeat.ps1` | P0 |
-| K-02 | Проверить `%TEMP%` после закрытия | Нет `AI_*_Launcher.vbs` и `AI_*_Heartbeat.ps1`; `AI_*_Stop.flag` может остаться (штатно, удаляется при следующем запуске) | P0 |
-| K-03 | После работы лаунчера проверить `%TEMP%` | `relax_run_*.jsx` удалены; при ошибке скрипта файл остаётся для разбора | P1 |
+| K-01 | Close the game → check processes | No `powershell.exe` running `AI_*_Heartbeat.ps1` | P0 |
+| K-02 | Check `%TEMP%` after closing | No `AI_*_Launcher.vbs` or `AI_*_Heartbeat.ps1`; `AI_*_Stop.flag` may remain (by design, removed on the next launch) | P0 |
+| K-03 | After using the launcher, check `%TEMP%` | `relax_run_*.jsx` files are deleted; if a script fails, its file remains for investigation | P1 |
 
 ```powershell
 Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" |
@@ -210,56 +210,56 @@ Get-ChildItem $env:TEMP -Filter "relax_run_*" | Select Name, LastWriteTime
 
 ---
 
-## 6. Критерии входа и выхода
+## 6. Entry and Exit Criteria
 
-**Вход:** `check.js` → `OK`; `test-core.js` → `16/16`; `_baseline_20261107/` на месте; Illustrator 2026 запускается.
+**Entry:** `check.js` → `OK`; `test-core.js` → `16/16`; `_baseline_20261107/` is present; Illustrator 2026 launches.
 
-**Выход (приёмка):**
-1. Все P0 пройдены.
-2. Все P1 пройдены или зафиксированы как известные ограничения с обоснованием.
-3. K-01 и K-02 чисты.
-4. Нет регресса J-01, J-03.
-5. Найденные дефекты P0 закрыты.
+**Exit (acceptance):**
+1. All P0 checks have passed.
+2. All P1 checks have passed or are recorded as known limitations with justification.
+3. K-01 and K-02 are clean.
+4. No regressions in J-01 and J-03.
+5. All discovered P0 defects are closed.
 
-## 7. Известные ограничения (не дефекты)
+## 7. Known Limitations (Not Defects)
 
-- На macOS автономной анимации нет: статус покажет `Timer unavailable`, игра шагает только при движении мыши.
-- Если групп-политика блокирует `powershell.exe -ExecutionPolicy Bypass` или `wscript.exe`, таймер не запустится; игра сообщит об этом и останется управляемой.
-- `AI_*_Stop.flag` остаётся в `%TEMP%` до следующего запуска — так задумано.
-- Бандлы лаунчера в `%TEMP%` при ошибке сохраняются намеренно.
-- Содержимое игр случайно (фигуры, призраки, пещеры), поэтому пиксельное сравнение скриншотов «до/после» некорректно — сверяется геометрия.
+- On macOS, there is no autonomous animation: the status shows `Timer unavailable`, and the game advances only when the mouse moves.
+- If group policy blocks `powershell.exe -ExecutionPolicy Bypass` or `wscript.exe`, the timer does not start; the game reports this and remains controllable.
+- `AI_*_Stop.flag` remains in `%TEMP%` until the next launch — this is intentional.
+- Launcher bundles in `%TEMP%` are intentionally preserved on error.
+- Game content is random (pieces, ghosts, caves), so pixel-by-pixel comparison of "before/after" screenshots is invalid; geometry is compared instead.
 
-## 8. Шаблон дефекта
+## 8. Defect Template
 
 ```
-Игра:            Tetris / Play Arcade / lib
-Версия AI:       2026 (29.x) / 2021
-ОС и DPI:        Windows 11, 125 %
-Шаги:            1) … 2) … 3) …
-Фактически:      …
-Ожидалось:       …
-Повторяемость:   всегда / 3 из 5
-Скриншот:        _test/2026-11-08_tetris_cs.png
-Лог кадров:      %TEMP%\relax_log_<Игра>.txt
-Хвосты:          powershell.exe жив / AI_*_Launcher.vbs остался / сейв битый
+Game:            Tetris / Play Arcade / lib
+AI version:      2026 (29.x) / 2021
+OS and DPI:      Windows 11, 125 %
+Steps:           1) … 2) … 3) …
+Actual:          …
+Expected:        …
+Reproducibility: always / 3 out of 5
+Screenshot:      _test/2026-11-08_tetris_cs.png
+Frame log:       %TEMP%\relax_log_<Game>.txt
+Leftovers:       powershell.exe alive / AI_*_Launcher.vbs left behind / corrupt save
 ```
 
-Лог кадров пишется автоматически; колонки `set / hs / draw` показывают, на каком этапе кадра теряется время (см. `README.md`, раздел «Диагностика и логи»).
+The frame log is written automatically; the `set / hs / draw` columns show at which stage of the frame time is lost (see `README.md`, section "Diagnostics and Logs").
 
-## 9. Чек-лист приёмки
+## 9. Acceptance Checklist
 
 ```
 [ ] A-01 check.js OK
 [ ] A-02 test-core 16/16
-[ ] B-01…B-04 лаунчер и запуск без lib
-[ ] C-01…C-04 все 7 игр открываются/закрываются
-[ ] D-01…D-09 управление, Arkanoid и Space Invaders — мышью без рывков
-[ ] E-00 кодировка: нет `â€¢` / `ÄŒ` / `à¤¹à¤¿` в UI
-[ ] E-01…E-04 4 языка без обрезки и квадратов
-[ ] F-01…F-06 сохранения, включая старый сейв
-[ ] G-01…G-03 экспорт на артборд
-[ ] H-01 ≤ 4 записей сейва за 10 с
-[ ] I-01…I-02 убитый таймер и чужое окно
-[ ] J-01/J-03 регресс с baseline
-[ ] K-01…K-03 нет висящих процессов и temp-мусора
+[ ] B-01…B-04 launcher and launch without lib
+[ ] C-01…C-04 all 7 games open/close
+[ ] D-01…D-09 controls; Arkanoid and Space Invaders — mouse with no jitter
+[ ] E-00 encoding: no `â€¢` / `ÄŒ` / `à¤¹à¤¿` in UI
+[ ] E-01…E-04 4 languages with no truncation or square glyphs
+[ ] F-01…F-06 saves, including an old save
+[ ] G-01…G-03 artboard export
+[ ] H-01 ≤ 4 save writes per 10 s
+[ ] I-01…I-02 killed timer and foreign window
+[ ] J-01/J-03 regression against baseline
+[ ] K-01…K-03 no stuck processes or temp garbage
 ```

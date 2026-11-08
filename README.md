@@ -23,37 +23,25 @@ The games are the visible part. The real subject of this repository is **what th
 | **Runtime diagnostics** | Every game writes a frame-timing log (status label / hide-show / drawing) to `%TEMP%\relax_log_<Game>.txt`, which is how the 6–7 fps cadence was measured and fixed. | [`lib/GamePerf.jsx`](lib/GamePerf.jsx) |
 | **Launcher without `#include` support** | `$.evalFile()` is not documented to preprocess `#include`, so the launcher inlines the sources itself into a temporary single-file bundle and runs that. | [`Play Arcade.jsx`](Play%20Arcade.jsx) |
 
-## Screenshots
-
-| Launcher | 2048 |
-|---|---|
-| ![Launcher](screenshots/launcher.png) | ![2048](screenshots/2048.png) |
-
-| Arkanoid | Snake |
-|---|---|
-| ![Arkanoid](screenshots/arkanoid.png) | ![Snake](screenshots/snake.png) |
-
-| Space Invaders | Boulder Dash |
-|---|---|
-| ![Space Invaders](screenshots/space-invaders.png) | ![Boulder Dash](screenshots/boulder-dash.png) |
-
-| Pac-Man | Tetris |
-|---|---|
-| ![Pac-Man](screenshots/pac-man.png) | *screenshot pending* |
-
 ## The games
 
-| Game | File | Genre | What is interesting in it |
+Every screenshot below is the real ScriptUI window, drawn by the game itself — no mock-ups.
+
+|  | Game | Genre | What is interesting in it |
 |---|---|---|---|
-| **2048** | `2048.jsx` | Puzzle | Swipe gestures, tile merging, full game state restored between sessions |
-| **Tetris** | `Tetris.jsx` | Classic | 7-bag randomizer, wall kicks, ghost piece, hold/next preview, smooth falling piece |
-| **Arkanoid** | `Arkanoid.jsx` | Action | Continuous physics, 5 stages, 5 power-up capsules, lasers, mouse-driven paddle |
-| **Snake** | `Snake.jsx` | Arcade | Turn queue, 3 arena modes (walls / portals / labyrinth), gradient body |
-| **Space Invaders** | `SpaceInvaders.jsx` | Shooter | 5×9 swarm with two-frame animation, eroding bunkers, mystery UFO |
-| **Boulder Dash** | `BoulderDash.jsx` | Logic | Cell gravity for boulders and gems, monster AI, 5 hand-built caves |
-| **Pac-Man** | `PacMan.jsx` | Arcade | 19×21 maze, four ghosts with different personalities, frightened mode |
+| <img src="screenshots/2048.png" width="150" alt="2048"> | **2048**<br>`2048.jsx` | Puzzle | Swipe gestures, tile merging, full game state restored between sessions |
+| <img src="screenshots/tetris.png" width="150" alt="Tetris"> | **Tetris**<br>`Tetris.jsx` | Classic | 7-bag randomizer, wall kicks, ghost piece, hold/next preview, smooth falling piece |
+| <img src="screenshots/arkanoid.png" width="150" alt="Arkanoid"> | **Arkanoid**<br>`Arkanoid.jsx` | Action | Continuous physics, 5 stages, 5 power-up capsules, lasers, mouse-driven paddle |
+| <img src="screenshots/snake.png" width="150" alt="Snake"> | **Snake**<br>`Snake.jsx` | Arcade | Turn queue, 3 arena modes (walls / portals / labyrinth), gradient body |
+| <img src="screenshots/space-invaders.png" width="150" alt="Space Invaders"> | **Space Invaders**<br>`SpaceInvaders.jsx` | Shooter | 5×9 swarm with two-frame animation, eroding bunkers, mystery UFO |
+| <img src="screenshots/boulder-dash.png" width="150" alt="Boulder Dash"> | **Boulder Dash**<br>`BoulderDash.jsx` | Logic | Cell gravity for boulders and gems, monster AI, 5 hand-built caves |
+| <img src="screenshots/pac-man.png" width="150" alt="Pac-Man"> | **Pac-Man**<br>`PacMan.jsx` | Arcade | 19×21 maze, four ghosts with different personalities, frightened mode |
 
 ## Quick start
+
+The launcher is the entry point: one window with all seven games, hotkeys `1`–`7`, a random pick, and shortcuts to the docs, the game folder and the runtime logs.
+
+<img src="screenshots/launcher.png" width="420" alt="RELAX launcher with the seven games">
 
 1. Download or clone this repository (**keep the folder intact — the games share `lib/`**).
 2. In Illustrator open `File > Scripts > Other Script…` and pick **`Play Arcade.jsx`**.
@@ -84,6 +72,7 @@ README.md            this file
 TESTING.md           test plan: coverage matrix, cases A-01 … K-03, acceptance checklist
 AGENTS.md            conventions for contributors
 EXTENDSCRIPT_GAME_DEV_GUIDE.md  the engineering write-up
+LICENSE              MIT
 ```
 
 ## Verification
@@ -102,10 +91,14 @@ Both run on Node alone — Illustrator is not required. The runtime test is manu
 - **Windows** for autonomous animation. On macOS the heartbeat is unavailable: the game still runs, but advances only while the mouse moves, and the status bar says so.
 - Corporate machines may block `powershell.exe -ExecutionPolicy Bypass` or `wscript.exe`; the game then reports that the timer is unavailable instead of silently freezing.
 - The games are modal dialogs by design — that is the only reliable way to keep an ExtendScript window alive.
-- No licence file yet: the code is published for reference and evaluation.
+- Released under the MIT licence: free to reuse, modify and redistribute with attribution.
 
 ## Documentation
 
-- **[EXTENDSCRIPT_GAME_DEV_GUIDE.md](EXTENDSCRIPT_GAME_DEV_GUIDE.md)** — the platform traps and the recipes that solve them (timer, vector font, batching, interpolation, encoding, export). Written in Russian.
-- **[TESTING.md](TESTING.md)** — test plan with case IDs and an acceptance checklist. Written in Russian.
+- **[EXTENDSCRIPT_GAME_DEV_GUIDE.md](EXTENDSCRIPT_GAME_DEV_GUIDE.md)** — the platform traps and the recipes that solve them (timer, vector font, batching, interpolation, encoding, export).
+- **[TESTING.md](TESTING.md)** — test plan with case IDs and an acceptance checklist.
 - **[AGENTS.md](AGENTS.md)** — coding conventions, encoding contract, review expectations.
+
+## Licence
+
+MIT — see [LICENSE](LICENSE). Take the code, the techniques and the write-up, fork them, ship them in your own scripts.

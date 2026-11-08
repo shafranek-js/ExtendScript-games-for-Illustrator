@@ -1,106 +1,106 @@
-# Руководство по разработке аркадных и логических игр на ExtendScript (`.jsx`) для Adobe Illustrator
+# Developing Arcade and Puzzle Games with ExtendScript (`.jsx`) for Adobe Illustrator
 
-Это практическое руководство обобщает инженерный и геймдизайнерский опыт создания серии игр для **Adobe Illustrator** на базе **ExtendScript + ScriptUI**:
-- **Pantone 2048 C** (`2048.jsx`) — пошаговая головоломка со свайпами и векторной типографикой
-- **Tetris** (`Tetris.jsx`) — классический стакан 10×20, 7-bag рандомайзер, Hold/Next, Ghost Piece
-- **Arkanoid** (`Arkanoid.jsx`) — физика отскоков с непрерывными координатами, 5 типов капсул-бонусов, лазеры
-- **Snake** (`Snake.jsx`) — змейка с градиентным телом, очередью поворотов и 3 режимами арен
-- **Space Invaders** (`SpaceInvaders.jsx`) — строй пришельцев 5×9 с двухкадровой анимацией, разрушаемые бункеры, НЛО
-- **Boulder Dash** (`BoulderDash.jsx`) — клеточная гравитация валунов и алмазов, ИИ подземных монстров, 5 пещер
-- **Pac-Man** (`PacMan.jsx`) — лабиринт 19×21, 4 призрака с разными характерами, режим «испуга»
+This practical guide distills engineering and game-design experience from creating a series of games for **Adobe Illustrator** on top of **ExtendScript + ScriptUI**:
+- **Pantone 2048 C** (`2048.jsx`) — a turn-based puzzle with swipes and vector typography
+- **Tetris** (`Tetris.jsx`) — a classic 10×20 well, 7-bag randomizer, Hold/Next, Ghost Piece
+- **Arkanoid** (`Arkanoid.jsx`) — bounce physics with continuous coordinates, 5 bonus capsule types, lasers
+- **Snake** (`Snake.jsx`) — a snake with a gradient body, a turn queue, and 3 arena modes
+- **Space Invaders** (`SpaceInvaders.jsx`) — a 5×9 alien formation with two-frame animation, destructible bunkers, and a UFO
+- **Boulder Dash** (`BoulderDash.jsx`) — grid-based gravity for boulders and diamonds, underground-monster AI, and 5 caves
+- **Pac-Man** (`PacMan.jsx`) — a 19×21 maze, 4 ghosts with distinct personalities, and a "frightened" mode
 
-Документ написан для разработчика, который хочет создавать собственные интерактивные игры или сложные графические приложения внутри Illustrator, не наступая на специфические грабли платформы.
+The document is written for a developer who wants to build their own interactive games or complex graphics applications inside Illustrator without running into the platform's specific pitfalls.
 
 ---
 
-## 0. Структура проекта
+## 0. Project Structure
 
 ```
 lib/
-  GameCore.jsx        # цвет, скругления, капсулы, дуги, прогон глифов, makeRGBColor
-  GameHeartbeat.jsx   # автономный цикл Win32Heartbeat (Windows)
-  GamePersist.jsx     # key=value в Folder.userData
-  GameI18n.jsx        # подстановка {0}
-  GamePerf.jsx        # лог кадров в %TEMP%\relax_log_<Игра>.txt
+  GameCore.jsx        # color, rounded corners, capsules, arcs, glyph run, makeRGBColor
+  GameHeartbeat.jsx   # autonomous Win32Heartbeat loop (Windows)
+  GamePersist.jsx     # key=value in Folder.userData
+  GameI18n.jsx        # {0} substitution
+  GamePerf.jsx        # frame log in %TEMP%\relax_log_<Game>.txt
 tools/
-  check.js            # статическая проверка: #include, синтаксис, ES3-гейт, кодировка, i18n
-  test-core.js        # прогон lib/ в песочнице (геометрия, i18n, heartbeat)
-  migrate.js          # механические правки (удаление функций, вставка #include)
-Play Arcade.jsx       # лаунчер: меню всех игр, хоткеи 1-7, Random, Docs, Logs, Folder
-2048.jsx … Tetris.jsx # сами игры
+  check.js            # static check: #include, syntax, ES3 gate, encoding, i18n
+  test-core.js        # run lib/ in a sandbox (geometry, i18n, heartbeat)
+  migrate.js          # mechanical edits (remove functions, insert #include)
+Play Arcade.jsx       # launcher: menu of all games, hotkeys 1-7, Random, Docs, Logs, Folder
+2048.jsx … Tetris.jsx # the games themselves
 EXTENDSCRIPT_GAME_DEV_GUIDE.md
 README.md
 TESTING.md
 AGENTS.md
 ```
 
-Каждая игра начинается одинаково:
+Every game starts the same way:
 
 ```javascript
 #target illustrator
 #include "lib/GameCore.jsx"
-#include "lib/GameHeartbeat.jsx"   // только для игр с реальным временем
+#include "lib/GameHeartbeat.jsx"   // real-time games only
 #include "lib/GameI18n.jsx"
 #include "lib/GamePersist.jsx"
 
 (function () {
-    // ... вся логика игры, локальные состояния и глифы
+    // ... all game logic, local state, and glyphs
 })();
 ```
 
-Правила, без которых это не работает:
-1. Директива `#include` должна стоять **первым символом строки**, до любого кода. Путь — относительно включающего файла.
-2. **Кодировка.** Illustrator читает `.jsx` без BOM как Windows-1252. Поэтому:
-   - **точка входа** (`2048.jsx`, `Tetris.jsx`, `Play Arcade.jsx`, …) — UTF-8 **с BOM** (`EF BB BF`), если в файле есть хоть один не-ASCII символ (стрелки `◄►`, `•`, `Čeština`, `हिन्दी`);
-   - **подключаемые файлы** (`lib/*.jsx`) — **ASCII-only и без BOM**: их текст вставляется в середину скрипта, и BOM оказался бы посреди кода.
-   - Проверка и авто-починка: `node tools/check.js --fix`.
-3. Функции ядра — глобальные (как `dev/lib/Utils.jsx`), поэтому call-site'ы в играх остаются короткими. Обратная сторона: **глобальная функция не видит локальные функции игры** — см. §3.2.
-4. Игры не ссылаются друг на друга и не делят состояние: каждое включение `lib/` даёт свой экземпляр функций.
+Rules without which this does not work:
+1. The `#include` directive must be **the first character of the line**, before any code. The path is relative to the including file.
+2. **Encoding.** Illustrator reads a `.jsx` file without a BOM as Windows-1252. Therefore:
+   - the **entry point** (`2048.jsx`, `Tetris.jsx`, `Play Arcade.jsx`, …) — UTF-8 **with BOM** (`EF BB BF`) if the file contains even one non-ASCII character (arrows `◄►`, `•`, `Čeština`, `हिन्दी`);
+   - **included files** (`lib/*.jsx`) — **ASCII-only and without a BOM**: their text is inserted into the middle of the script, and a BOM would end up in the middle of the code.
+   - Check and auto-fix: `node tools/check.js --fix`.
+3. Core functions are global (like `dev/lib/Utils.jsx`), so call sites in games stay short. The flip side: **a global function cannot see a game's local functions** — see §3.2.
+4. Games do not reference one another and do not share state: each inclusion of `lib/` produces its own instance of the functions.
 
-Запуск: `File > Scripts > Other Script…` → `Play Arcade.jsx` (меню всех игр) или сразу файл нужной игры.
-Проверка: `node tools/check.js` и `node tools/test-core.js` (см. §8).
+Launch: `File > Scripts > Other Script…` → `Play Arcade.jsx` (menu of all games) or directly the file of the desired game.
+Check: `node tools/check.js` and `node tools/test-core.js` (see §8).
 
-### 0.1. Лаунчер и почему он собирает «бандл»
+### 0.1. The Launcher and Why It Builds a "Bundle"
 
-`Play Arcade.jsx` не полагается на то, что `$.evalFile()` умеет обрабатывать `#include` (это поведение нигде не документировано). Он читает `.jsx`, рекурсивно подставляет вместо `#include "…"` содержимое файлов, вырезает `#target`, пишет один временный скрипт в `Folder.temp` и запускает его через `$.evalFile()`. После успешного запуска временный файл удаляется, при ошибке — остаётся для разбора. Побочный плюс: тем же способом можно получить одиночный `.jsx` для передачи коллеге.
-
----
-
-## 1. Особенности и ограничения среды Illustrator ExtendScript
-
-Прежде чем проектировать архитектуру игры, необходимо учитывать 4 фундаментальных ограничения движка в Illustrator:
-
-1. **Стандарт языка — ECMAScript 3 (ES3, 1999 г.)**:
-   - **Нет**: `let`, `const`, стрелочных функций `() => {}`, шаблонных строк, `JSON.parse`/`JSON.stringify`, `Array.prototype.forEach`, `map`, `filter`, `indexOf`, `String.prototype.trim`.
-   - **Используйте**: `var`, классические циклы `for`, собственные хелперы и обёртку в IIFE `(function () { ... })();`, чтобы не засорять глобальное пространство имён Illustrator.
-   - `String.prototype.indexOf` и `Array.prototype.indexOf` — разные вещи: первый стандартный, второй отсутствует.
-2. **Нет `setInterval`, `setTimeout` и `requestAnimationFrame`**:
-   - В After Effects существует `app.scheduleTask()`, в InDesign — `idleTasks`, но **в Adobe Illustrator нет ни одного нативного таймера**.
-3. **Только модальные окна `new Window("dialog", ...)`**:
-   - Немодальные окна (`palette`) теряют контекст выполнения сразу после завершения скрипта. Поэтому игра должна работать внутри модального `dialog`.
-4. **Блокирующий цикл сообщений Win32**:
-   - Пока открыт `dialog`, поток ExtendScript спит внутри системного вызова ожидания событий ОС и просыпается **только тогда**, когда окну приходит событие мыши или клавиатуры.
+`Play Arcade.jsx` does not rely on `$.evalFile()` being able to handle `#include` (this behavior is undocumented anywhere). It reads the `.jsx`, recursively substitutes the contents of files for `#include "…"`, strips `#target`, writes a single temporary script to `Folder.temp`, and runs it via `$.evalFile()`. After a successful launch the temporary file is deleted; on error it is left behind for debugging. A side benefit: the same method can produce a standalone `.jsx` to hand to a colleague.
 
 ---
 
-## 2. Главный секрет Real-Time игр: автономный цикл `Win32Heartbeat`
+## 1. Environment Features and Limitations of Illustrator ExtendScript
 
-### Проблема
-В пошаговых играх (*2048*) перерисовка нужна только в момент хода игрока. Но в динамичных играх (*Tetris, Arkanoid, Snake, Space Invaders, Pac-Man, Boulder Dash*) объекты должны двигаться сами. Если привязать игровой шаг только к `mousemove` окна, то как только игрок отпустит мышь — шарик в Арканоиде, змейка или падающий тетромино **замрут на месте**.
+Before designing a game architecture, you need to account for 4 fundamental limitations of the Illustrator engine:
 
-### Решение (реализовано в `lib/GameHeartbeat.jsx`)
-При открытии окна (`win.onShow`) скрипт генерирует во временной папке `Folder.temp` микро-скрипт PowerShell со встроенным C#-классом `Win32Heartbeat` (компилируется в памяти через `Add-Type`) и запускает его скрыто через `WScript.Shell` (`wscript.exe` с флагом окна `0` — без единого моргания консоли).
+1. **The language standard is ECMAScript 3 (ES3, 1999)**:
+   - **Not available**: `let`, `const`, arrow functions `() => {}`, template strings, `JSON.parse`/`JSON.stringify`, `Array.prototype.forEach`, `map`, `filter`, `indexOf`, `String.prototype.trim`.
+   - **Use**: `var`, classic `for` loops, custom helpers, and an IIFE wrapper `(function () { ... })();` so you do not pollute Illustrator's global namespace.
+   - `String.prototype.indexOf` and `Array.prototype.indexOf` are different things: the former is standard, the latter is absent.
+2. **No `setInterval`, `setTimeout`, or `requestAnimationFrame`**:
+   - After Effects has `app.scheduleTask()`, InDesign has `idleTasks`, but **Adobe Illustrator has no native timer at all**.
+3. **Only modal windows `new Window("dialog", ...)`**:
+   - Non-modal windows (`palette`) lose their execution context immediately after the script finishes. Therefore a game must run inside a modal `dialog`.
+4. **Blocking Win32 message loop**:
+   - While a `dialog` is open, the ExtendScript thread sleeps inside a system call waiting for OS events and wakes **only when** a mouse or keyboard event arrives at the window.
 
-Каждые `25–40 мс` фоновый процесс проверяет, существует ли ещё окно игры, и посылает ему «пульс» событий, пробуждающий JS-движок Illustrator. Когда игрок закрывает окно (`win.onClose`), цикл мгновенно завершается.
+---
 
-**Поведение в фоне.** Игра продолжается, даже если Illustrator свёрнут в другое окно: останавливать её при потере фокуса нельзя, иначе игрок, переключившийся на минуту в другую программу, возвращается к «замороженной» игре. Останавливается таймер только когда окно игры невидимо (Illustrator свёрнут) — `if (!IsWindowVisible(hwnd)) return;`.
+## 2. The Main Secret of Real-Time Games: the Autonomous `Win32Heartbeat` Loop
 
-При этом микро-сдвиг курсора (`mouse_event`) выполняется **только когда окно игры в фокусе**: иначе пульс дёргал бы указатель, пока вы работаете в другом приложении. Пробуждение движка (`WM_MOUSEMOVE` + `F15`) идёт всегда.
+### The Problem
+In turn-based games (*2048*), a redraw is needed only when the player makes a move. But in dynamic games (*Tetris, Arkanoid, Snake, Space Invaders, Pac-Man, Boulder Dash*), objects must move on their own. If the game step is tied only to the window's `mousemove`, then as soon as the player releases the mouse, the ball in Arkanoid, the snake, or the falling tetromino **freezes in place**.
 
-Игра подключает это двумя строками:
+### The Solution (implemented in `lib/GameHeartbeat.jsx`)
+When the window opens (`win.onShow`), the script generates a micro PowerShell script in the `Folder.temp` folder with an embedded C# class `Win32Heartbeat` (compiled in memory via `Add-Type`) and launches it hidden through `WScript.Shell` (`wscript.exe` with window flag `0` — without a single console flash).
+
+Every `25–40 ms` the background process checks whether the game window still exists and sends it a "pulse" of events that wakes the Illustrator JS engine. When the player closes the window (`win.onClose`), the loop terminates instantly.
+
+**Background behavior.** The game continues even if Illustrator is minimized behind another window: it must not stop on focus loss, otherwise a player who switches to another program for a minute returns to a "frozen" game. The timer stops only when the game window is invisible (Illustrator is minimized) — `if (!IsWindowVisible(hwnd)) return;`.
+
+At the same time, the micro cursor movement (`mouse_event`) is performed **only when the game window is focused**: otherwise the pulse would tug at the pointer while you work in another application. Engine wake-up (`WM_MOUSEMOVE` + `F15`) always happens.
+
+The game connects this in two lines:
 
 ```javascript
-var HB = { title: WIN_TITLE, token: "Tetris", tickMs: 40 };   // title = WIN_TITLE окна
+var HB = { title: WIN_TITLE, token: "Tetris", tickMs: 40 };   // title = WIN_TITLE of the window
 
 win.onShow = function () {
     applyThemeColors();
@@ -113,80 +113,80 @@ win.onShow = function () {
 
 win.onClose = function () {
     heartbeatStop();
-    // ... сохранение настроек/состояния
+    // ... save settings/state
 };
 ```
 
-API модуля: `heartbeatSupported()`, `heartbeatStart(cfg)`, `heartbeatStop()`, `heartbeatLastError()`.
+Module API: `heartbeatSupported()`, `heartbeatStart(cfg)`, `heartbeatStop()`, `heartbeatLastError()`.
 
-### Параметры тика (единая таблица, не разъезжается по файлам)
+### Tick Parameters (a single table, not scattered across files)
 
-| Игра | `tickMs` | Шаг логики внутри JS | Комментарий |
+| Game | `tickMs` | Logic step inside JS | Comment |
 |---|---|---|---|
-| Arkanoid | 25 | `stepPhysicsOnce()` не чаще 20 мс | самый чувствительный к плавности |
-| Tetris | 40 | гравитация по часам (800→120 мс) | тик влияет только на плавность |
-| Snake / PacMan / SpaceInvaders / BoulderDash | 35 | свой интервал (60 / 60 / 32 / 155 мс) | тик = «частота пробуждения» |
+| Arkanoid | 25 | `stepPhysicsOnce()` no more than once per 20 ms | the most sensitive to smoothness |
+| Tetris | 40 | clock-based gravity (800→120 ms) | the tick affects only smoothness |
+| Snake / PacMan / SpaceInvaders / BoulderDash | 35 | its own interval (60 / 60 / 32 / 155 ms) | the tick is the "wake-up rate" |
 
-**Важно:** шаг логики — фиксированный (объект сдвигается на фиксированное число пикселей/клеток за шаг), поэтому реальная скорость зависит от частоты событий. Если нужна независимость от загрузки CPU — накапливайте `dt` и делайте `while (acc >= 16.7 && steps < 3) { step(); acc -= 16.7; }`.
+**Important:** the logic step is fixed (an object moves a fixed number of pixels/cells per step), so the actual speed depends on the event rate. If you need independence from CPU load, accumulate `dt` and do `while (acc >= 16.7 && steps < 3) { step(); acc -= 16.7; }`.
 
-### Контракт синтетического события мыши
-Пульс содержит три сигнала:
-1. `PostMessage(hwnd, 0x0200, 0, lp)` — `WM_MOUSEMOVE` окну, где `lp` содержит **реальные клиентские координаты курсора**;
-2. `PostMessage(hwnd, 0x0100, VK_F15, 0)` — нажатие несуществующей клавиши **`F15` (`0x7E`)**; в обработчике `keydown` ловится `if (k === "F15")` и вызывается шаг игры;
-3. `mouse_event(0x0001, 0, ±1)` — микро-сдвиг курсора на `1 px` строго по вертикали, чтобы ОС сгенерировала настоящее событие. Делается **только когда курсор внутри игрового поля** (иначе он мешал бы нажимать кнопки).
+### Synthetic Mouse Event Contract
+The pulse contains three signals:
+1. `PostMessage(hwnd, 0x0200, 0, lp)` — `WM_MOUSEMOVE` to the window, where `lp` contains the **real client coordinates of the cursor**;
+2. `PostMessage(hwnd, 0x0100, VK_F15, 0)` — a press of the nonexistent key **`F15` (`0x7E`)**; the `keydown` handler catches it with `if (k === "F15")` and invokes the game step;
+3. `mouse_event(0x0001, 0, ±1)` — a micro-shift of the cursor by `1 px` strictly vertically so the OS generates a real event. It is done **only when the cursor is inside the game field** (otherwise it would interfere with button clicks).
 
-Поскольку координаты в `WM_MOUSEMOVE` реальные, играм с управлением мышью **не нужны магические константы** вида `if (ev.clientX === 208)`. Порог «пользователь реально двинул мышь» остаётся: `Math.abs(ev.clientX - lastX) >= 2`, потому что пульс сдвигает курсор на 1 px.
+Since the coordinates in `WM_MOUSEMOVE` are real, games with mouse control **do not need magic constants** like `if (ev.clientX === 208)`. The threshold for "the user actually moved the mouse" remains: `Math.abs(ev.clientX - lastX) >= 2`, because the pulse shifts the cursor by 1 px.
 
-### Игровое поле определяется по дочернему окну
-Раньше зона «курсор внутри игры» задавалась константами вида `cpt.Y >= 68 && cpt.Y <= (wr.Bottom - 36)`, привязанными к конкретной вёрстке. Сейчас `Tick` перебирает дочерние окна, берёт **самое широкое окно высотой > 200 px** (это игровой canvas) и проверяет попадание курсора в его `GetWindowRect` с отступом 4 px. Вёрстку можно менять, не трогая C#.
+### The Game Field Is Determined from the Child Window
+Previously, the "cursor inside the game" zone was defined by constants like `cpt.Y >= 68 && cpt.Y <= (wr.Bottom - 36)`, tied to a specific layout. Now `Tick` iterates over child windows, takes **the widest window with height > 200 px** (this is the game canvas), and checks whether the cursor falls within its `GetWindowRect` with a 4 px inset. The layout can be changed without touching the C#.
 
-### ⚠️ Критическая ловушка PowerShell + C# P/Invoke (`FindWindow`)
-Никогда не объявляйте первый параметр `FindWindow` в C# как `string lpClassName`, если вызываете его из PowerShell с `$null`:
+### ⚠️ Critical Pitfall of PowerShell + C# P/Invoke (`FindWindow`)
+Never declare the first `FindWindow` parameter in C# as `string lpClassName` if you call it from PowerShell with `$null`:
 ```csharp
-// ❌ ОШИБКА: PowerShell приведёт $null к пустой строке "", а не к NULL-указателю.
-// Win32 FindWindowW("", title) вернёт 0, и таймер не запустится.
+// ❌ BUG: PowerShell converts $null to an empty string "", not to a NULL pointer.
+// Win32 FindWindowW("", title) returns 0, and the timer never starts.
 public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
 ```
-Правильно — `IntPtr lpClassName` и `IntPtr.Zero` внутри `FindGameWindow`, плюс резервный поиск по заголовку.
+The correct approach is `IntPtr lpClassName` and `IntPtr.Zero` inside `FindGameWindow`, plus a fallback search by title.
 
-### Резервный поиск окна — только по префиксу
-Точное совпадение заголовка ищется первым. Если не нашлось (окно ещё не создано), перебираются видимые окна, и берётся то, чей заголовок **начинается** с нужной строки. Поиск по подстроке (`"TETRIS"`, `"SNAKE"`) удалён намеренно: он мог привязаться к вкладке браузера или к самому Illustrator, если документ сохранён как `Tetris.ai` (а слой экспорта называется `Tetris_Vector_Board`).
+### Fallback Window Search: Prefix Only
+An exact title match is tried first. If none is found (the window has not been created yet), visible windows are enumerated and the one whose title **begins with** the required string is taken. Substring search (`"TETRIS"`, `"SNAKE"`) was removed intentionally: it could latch onto a browser tab or onto Illustrator itself if the document was saved as `Tetris.ai` (and the export layer is named `Tetris_Vector_Board`).
 
-### Временные файлы и уборка
-На игру создаются три файла в `Folder.temp`: `AI_<Token>_Heartbeat.ps1`, `AI_<Token>_Launcher.vbs`, `AI_<Token>_Stop.flag`. `heartbeatStop()` пишет флаг и удаляет `.ps1`/`.vbs` (если PowerShell ещё читает файл — удаление тихо не удаётся, следующий запуск перезапишет). Процесс PowerShell сам завершается по `IsWindow(hwnd)` и по флагу, поэтому «висящих» процессов не остаётся.
+### Temporary Files and Cleanup
+Three files are created per game in `Folder.temp`: `AI_<Token>_Heartbeat.ps1`, `AI_<Token>_Launcher.vbs`, `AI_<Token>_Stop.flag`. `heartbeatStop()` writes the flag and deletes `.ps1`/`.vbs` (if PowerShell is still reading the file, deletion fails silently; the next launch overwrites it). The PowerShell process exits by itself based on `IsWindow(hwnd)` and the flag, so no "hanging" processes remain.
 
-### Платформенные ограничения
-- **Windows-only.** На macOS `heartbeatStart()` возвращает `false` и игра показывает `statusNoHeartbeat`: анимация возможна только пока пользователь двигает мышь. Молчаливого «зависания» больше нет.
-- **Корпоративные политики.** Цепочка `wscript.exe` → `powershell -ExecutionPolicy Bypass` → `Add-Type` + `PostMessage`/`mouse_event` — ровно тот профиль, который отмечают EDR/антивирус. Если PowerShell или VBScript заблокированы групп-политикой, `heartbeatStart()` вернёт `false` (игра сообщит об этом), но не «сломается».
-- **Задержка старта.** `Add-Type` компилирует C# на каждом запуске (~1–2 с); именно поэтому процесс запускается асинхронно и не блокирует открытие окна.
+### Platform Limitations
+- **Windows-only.** On macOS `heartbeatStart()` returns `false` and the game shows `statusNoHeartbeat`: animation is possible only while the user moves the mouse. There is no more silent "freezing".
+- **Corporate policies.** The chain `wscript.exe` → `powershell -ExecutionPolicy Bypass` → `Add-Type` + `PostMessage`/`mouse_event` is exactly the profile EDR/antivirus flags. If PowerShell or VBScript is blocked by Group Policy, `heartbeatStart()` returns `false` (the game reports this) but does not "break".
+- **Start delay.** `Add-Type` compiles C# on every launch (~1–2 s); that is why the process is launched asynchronously and does not block window opening.
 
 ---
 
-## 3. Графический движок `ScriptUIGraphics`: обход багов и векторный рендеринг
+## 3. The `ScriptUIGraphics` Rendering Engine: Working Around Bugs and Vector Rendering
 
-Все игры рисуются на кастомном контроле `var gameCanvas = win.add("group")` внутри коллбэка `gameCanvas.onDraw = function () { drawScene(this.graphics); };`.
+All games are drawn on a custom control `var gameCanvas = win.add("group")` inside the callback `gameCanvas.onDraw = function () { drawScene(this.graphics); };`.
 
-### 3.1. Баг `g.drawString()` на Windows и собственный векторный шрифт
-В реализации `ScriptUIGraphics` для Windows в Adobe Illustrator есть серьёзный дефект расчёта метрик шрифта (`g.measureString` и вертикального `baseline` в `g.drawString`):
-- При увеличении кегля шрифта цифры смещаются сильно вниз и прижимаются к нижней кромке плитки или вылезают за её пределы.
-- Величина смещения нелинейно зависит от длины строки и установленного системного масштабирования DPI.
+### 3.1. The `g.drawString()` Bug on Windows and a Custom Vector Font
+In the Windows implementation of `ScriptUIGraphics` in Adobe Illustrator, there is a serious defect in font metrics (`g.measureString` and the vertical `baseline` in `g.drawString`):
+- As the font size grows, digits shift far downward and press against the bottom edge of the tile or spill beyond it.
+- The offset depends nonlinearly on the string length and the configured system DPI scaling.
 
-**Решение**: полный отказ от `g.drawString()` внутри игрового холста — **во всех 7 играх ноль вызовов `drawString`**. Вместо него используется собственный геометрический рендерер символов на базе двух примитивов из `lib/GameCore.jsx`:
-1. **`fillCapsule(g, x1, y1, x2, y2, r, brush)`** — отрезок произвольного наклона со скруглёнными торцами радиуса `r`.
-2. **`fillArcBand(g, cx, cy, rMid, rThick, startDeg, endDeg, brush)`** — гладкая дуга заданной толщины со скруглёнными концами.
+**Solution**: a complete rejection of `g.drawString()` inside the game canvas — **all 7 games have zero `drawString` calls**. Instead, a custom geometric character renderer is used, built on two primitives from `lib/GameCore.jsx`:
+1. **`fillCapsule(g, x1, y1, x2, y2, r, brush)`** — a segment of arbitrary slope with rounded ends of radius `r`.
+2. **`fillArcBand(g, cx, cy, rMid, rThick, startDeg, endDeg, brush)`** — a smooth arc of the given thickness with rounded ends.
 
-Комбинация капсул и дуг даёт цифры `0–9`, знаки `+ /`, и заглавные буквы (`SCORE`, `BEST`, `WAVE`, `PAUSE`, `OVER`), центрированные относительно `(cx, cy)` с точностью до долей пикселя.
+The combination of capsules and arcs produces the digits `0–9`, the signs `+ /`, and uppercase letters (`SCORE`, `BEST`, `WAVE`, `PAUSE`, `OVER`), centered relative to `(cx, cy)` to within fractions of a pixel.
 
-### 3.2. `drawGlyphRun` и правило «глобальная функция не видит локальную»
-Строка собирается общей функцией ядра:
+### 3.2. `drawGlyphRun` and the Rule "A Global Function Cannot See a Local One"
+A string is assembled by a shared core function:
 
 ```javascript
 drawGlyphRun(g, str, cx, cy, glyphH, rgbColor, alpha, glyphFn, gapRatio);
 ```
 
-`glyphFn` — это **локальная** функция игры `drawVectorGlyph` (или `drawVectorDigit` у 2048), потому что набор поддерживаемых символов у каждой игры свой. Передавать её обязательно: функция из `lib/` объявлена в глобальной области и не может напрямую вызвать функцию, объявленную внутри IIFE.
+`glyphFn` is the game's **local** `drawVectorGlyph` function (or `drawVectorDigit` in 2048), because each game has its own supported character set. Passing it is mandatory: the function from `lib/` is declared in the global scope and cannot directly call a function declared inside the IIFE.
 
-Поэтому в каждой игре остаётся трёхстрочная обёртка:
+That is why every game keeps a three-line wrapper:
 
 ```javascript
 function drawVectorString(g, strVal, cx, cy, glyphH, rgbColor, alpha) {
@@ -194,33 +194,33 @@ function drawVectorString(g, strVal, cx, cy, glyphH, rgbColor, alpha) {
 }
 ```
 
-Если символ отсутствует в таблице глифов, он **молча не рисуется** — проверяйте, что весь текст HUD покрыт набором (`check.js` сверяет литералы `tr()`/`setStatus()`, но не строки, нарисованные на canvas).
+If a character is missing from the glyph table, it is **silently not drawn** — verify that all HUD text is covered by the set (`check.js` compares `tr()`/`setStatus()` literals, but not strings drawn on the canvas).
 
-### 3.3. Как рисовать скруглённые прямоугольники (`fillRoundRect`)
-В `ScriptUIGraphics` нет `roundedRectPath` и нет кривых Безье, есть только `moveTo`, `lineTo`, `rectPath` и `ellipsePath`. Поэтому используется 16-точечная тригонометрическая аппроксимация углов через $\cos 30^\circ \approx 0.8660254$ и $\sin 30^\circ = 0.5$ — она уже реализована в `buildRoundRectPath` / `fillRoundRect` / `strokeRoundRect` в `lib/GameCore.jsx`; в играх этот код писать не нужно.
+### 3.3. How to Draw Rounded Rectangles (`fillRoundRect`)
+`ScriptUIGraphics` has no `roundedRectPath` and no Bezier curves; there are only `moveTo`, `lineTo`, `rectPath`, and `ellipsePath`. Therefore a 16-point trigonometric approximation of the corners is used via $\cos 30^\circ \approx 0.8660254$ and $\sin 30^\circ = 0.5$ — it is already implemented in `buildRoundRectPath` / `fillRoundRect` / `strokeRoundRect` in `lib/GameCore.jsx`; there is no need to write this code in the games.
 
-Канонические параметры сглаживания (не менять по одной игре): `fillCapsule` — `steps = 5`, `fillArcBand` — `arcSteps = 10`, `capSteps = 4`.
+The canonical smoothing parameters (do not change them for individual games): `fillCapsule` — `steps = 5`, `fillArcBand` — `arcSteps = 10`, `capSteps = 4`.
 
-### 3.5. Плавная отрисовка в клеточных играх (`lib/GameAnim.jsx`)
+### 3.5. Smooth Rendering in Grid-Based Games (`lib/GameAnim.jsx`)
 
-Логика в Pac-Man, Snake и Boulder Dash шагает 6–7 раз в секунду, а тетрамино в Tetris вообще раз в 800 мс. Если рисовать только в момент шага, объекты «прыгают» на клетку — это читается как лаги, хотя процессор простаивает (замер: кадр 0,3–3,4 мс, fps = шаг логики).
+Logic in Pac-Man, Snake, and Boulder Dash steps 6–7 times per second, while tetrominoes in Tetris step once every 800 ms. If you draw only at the step moment, objects "jump" by a cell — this reads as lag, even though the CPU is idle (measurement: a frame takes 0.3–3.4 ms, fps = logic step rate).
 
-Решение — рисовать чаще, чем шагает логика:
+The solution is to draw more often than the logic steps:
 
 ```javascript
-animBegin(getStepIntervalMs());   // в конце каждого шага логики
-animProgress();                   // в начале функции отрисовки
-var drawX = animLerp(pac.px, pac.x);   // дробная координата между клетками
-if (animDue(33)) refreshUI();     // пульс отрисовки ~30 fps между шагами
+animBegin(getStepIntervalMs());   // at the end of each logic step
+animProgress();                   // at the start of the draw function
+var drawX = animLerp(pac.px, pac.x);   // fractional coordinate between cells
+if (animDue(33)) refreshUI();     // draw pulse ~30 fps between steps
 ```
 
-`animLerp` намеренно не анимирует прыжок больше одной клетки: телепорт через туннель, съеденный призрак, «приземление» фигуры рисуются мгновенно.
+`animLerp` intentionally does not animate a jump of more than one cell: a tunnel teleport, an eaten ghost, or a piece "landing" is drawn instantly.
 
-Вторая половина приёма — **батчинг**: при 30 fps рисовать по клетке нельзя. `fillBatchRects` / `fillBatchCircles` из `lib/GameCore.jsx` собирают N фигур в один путь и делают один `fillPath`: лабиринт Pac-Man был ~340 заливок, стал 4; клетки Boulder Dash — ~1200, стало 13.
+The second half of the technique is **batching**: at 30 fps you cannot draw cell by cell. `fillBatchRects` / `fillBatchCircles` from `lib/GameCore.jsx` collect N shapes into a single path and make one `fillPath`: the Pac-Man maze went from ~340 fills to 4; Boulder Dash cells went from ~1200 to 13.
 
-### 3.4. Надёжная перерисовка экрана (`refreshUI`)
+### 3.4. Reliable Screen Redraw (`refreshUI`)
 
-В некоторых сборках Illustrator вызов `gameCanvas.notify("onDraw")` сам по себе не инвалидирует область окна. Всегда используйте комбинацию:
+In some Illustrator builds, calling `gameCanvas.notify("onDraw")` by itself does not invalidate the window area. Always use the combination:
 
 ```javascript
 function refreshUI() {
@@ -237,26 +237,26 @@ function refreshUI() {
 
 ---
 
-## 4. Правила вёрстки, символов и фокуса в ScriptUI
+## 4. Layout, Character, and Focus Rules in ScriptUI
 
-### 4.1. Запрет на цветные эмодзи (Astral Plane Unicode `U+10000+`)
-Стандартные кнопки и текстовые поля ScriptUI на Windows рендерятся через классический GDI, который не поддерживает суррогатные пары UTF-16.
-- ❌ **Не используйте**: `🎨`, `🌙`, `🚀`, `🐍`, `👾`, `💎` — они превратятся в пустые квадратики `□`.
-- ✅ **Используйте только символы из Basic Multilingual Plane (BMP)**:
-  - Стрелки и управление: `◄`, `►`, `▲`, `▼`, `❚❚`, `↻`, `↺`, `↶`
-  - Иконки и акценты: `❖`, `◐`, `☀`, `★`, `◈`, `✓`
+### 4.1. Ban on Color Emoji (Astral Plane Unicode `U+10000+`)
+Standard ScriptUI buttons and text fields on Windows are rendered through classic GDI, which does not support UTF-16 surrogate pairs.
+- ❌ **Do not use**: `🎨`, `🌙`, `🚀`, `🐍`, `👾`, `💎` — they turn into empty squares `□`.
+- ✅ **Use only characters from the Basic Multilingual Plane (BMP)**:
+  - Arrows and controls: `◄`, `►`, `▲`, `▼`, `❚❚`, `↻`, `↺`, `↶`
+  - Icons and accents: `❖`, `◐`, `☀`, `★`, `◈`, `✓`
 
-### 4.2. Защита от обрезки текста (`StaticText` Clipping)
-Контрол `statictext` никогда не переносит текст на новую строку и обрезает всё, что не поместилось в `preferredSize[0]`.
-- Сумма ширин элементов внутри горизонтальной группы `row` плюс `(N - 1) * spacing` **не должна превышать `CANVAS_W`**.
-- Тексты подсказок (`controlsHint`) во всех локализациях держите в пределах `24–28` символов.
-- Строки статуса (`statusReady`, `statusGameOver`) — не длиннее ~50 символов: футер шириной 365 px при Segoe UI 9 pt вмещает примерно столько.
+### 4.2. Preventing Text Clipping (`StaticText` Clipping)
+The `statictext` control never wraps text to a new line and clips anything that does not fit into `preferredSize[0]`.
+- The sum of element widths inside a horizontal `row` group plus `(N - 1) * spacing` **must not exceed `CANVAS_W`**.
+- Keep hint texts (`controlsHint`) within `24–28` characters in all localizations.
+- Status lines (`statusReady`, `statusGameOver`) — no longer than ~50 characters: a 365 px wide footer at Segoe UI 9 pt fits approximately that much.
 
-### 4.3. Удержание клавиатурного фокуса
-Кастомная область `Group` (`gameCanvas`) не принимает фокус клавиатуры при клике мышью. Чтобы клавиши `WASD` / `Стрелки` / `Space` работали безотказно:
-1. Зарегистрируйте `addEventListener("keydown", handleKeyEvent)` на **всех** фокусируемых элементах окна (`win`, все кнопки, `langDropdown`).
-2. После любого клика мышью по холсту или кнопкам вызывайте `refocusControl()`, возвращающий фокус на основную кнопку действия.
-3. Поскольку событие `keydown` может всплывать от кнопки к родительскому `win`, добавьте антидребезг по времени:
+### 4.3. Retaining Keyboard Focus
+The custom `Group` area (`gameCanvas`) does not take keyboard focus on a mouse click. To make the `WASD` / `Arrow` / `Space` keys work reliably:
+1. Register `addEventListener("keydown", handleKeyEvent)` on **all** focusable elements of the window (`win`, all buttons, `langDropdown`).
+2. After any mouse click on the canvas or buttons, call `refocusControl()`, which returns focus to the primary action button.
+3. Because a `keydown` event can bubble from a button to the parent `win`, add time-based debouncing:
    ```javascript
    var now = new Date().getTime();
    if (now - lastKeyTime < 65) return;
@@ -265,62 +265,62 @@ function refreshUI() {
 
 ---
 
-## 5. Геймдизайнерские приёмы («Designer Edition Polish»)
+## 5. Game-Design Techniques ("Designer Edition Polish")
 
-1. **Тактильный 2.5D-объём плиток и блоков**: три слоя — нижняя фаска/тень (`Lip`, на 35–45 единиц темнее), лицевая грань (`Face`), верхний блик (`Specular`, белый с альфой `0.25`).
-2. **Буферизация ввода игрока**:
-   - **Snake**: очередь `dirQueue` длиной до 2 команд предотвращает самопересечение при быстрых U-поворотах.
-   - **Pac-Man**: предзаказанный поворот `(nextDx, nextDy)` срабатывает в первом открытом коридоре перекрёстка.
-   - **Boulder Dash**: разделение неподвижных и уже летящих камней (`falling[r][c]`), чтобы камень над головой Рокфорда не убивал мгновенно.
-3. **Микро-система частиц (`sparks`)**: массив из 6–8 точек `{ x, y, vx, vy, color, life }` — 20 строк кода, но ощущение настоящего движка.
+1. **Tactile 2.5D volume for tiles and blocks**: three layers — a bottom bevel/shadow (`Lip`, 35–45 units darker), a front face (`Face`), and a top highlight (`Specular`, white with alpha `0.25`).
+2. **Player input buffering**:
+   - **Snake**: a `dirQueue` of up to 2 commands prevents self-collision during fast U-turns.
+   - **Pac-Man**: a pre-ordered turn `(nextDx, nextDy)` triggers in the first open corridor of an intersection.
+   - **Boulder Dash**: separation of stationary and already falling rocks (`falling[r][c]`) so that a rock above Rockford's head does not kill instantly.
+3. **Micro particle system (`sparks`)**: an array of 6–8 points `{ x, y, vx, vy, color, life }` — 20 lines of code, but it feels like a real engine.
 
 ---
 
-## 6. Локализация (включая Хинди / Деванагари) и сохранение данных
+## 6. Localization (Including Hindi / Devanagari) and Data Persistence
 
-### 6.1. Кодировка и словари
-1. Всегда сохраняйте `.jsx` в **UTF-8 с BOM**. ExtendScript отображает в `statictext`, `button` и `dropdownlist` как чешскую/румынскую диакритику (`Čeština`, `Română`), так и деванагари (`हिन्दी`); заголовки внутри `ScriptUIGraphics` лучше оставлять латиницей (`SCORE`, `BEST`, `STAGE`).
-2. **Проверьте BOM.** Без него Illustrator декодирует файл как Windows-1252, и в интерфейсе появляется `2048 â€¢ Adobe Illustrator Edition`, `ÄŒeÅ¡tina`, `RomÃ¢nÄƒ`, `à¤¹à¤¿à¤¨à¥à¤¦à¥€`. Это самая частая «поломка интерфейса» в ExtendScript-проектах: код при этом работает, поэтому ошибку замечают только по внешнему виду.
-   - Точка входа → BOM обязателен при наличии не-ASCII символов.
-   - Подключаемый файл (`lib/`) → BOM запрещён, держите его ASCII-only.
-   - Любой редактор/скрипт, перезаписывающий файл, может молча срезать BOM — после правок запускайте `node tools/check.js` (он выдаст ошибку) или `node tools/check.js --fix` (починит).
-3. Словари `en / cs / ro / hi` обязаны иметь **одинаковый набор ключей** — иначе в интерфейсе появится `undefined`. Проверяется автоматически (`check.js`).
-4. Подстановка параметров — `translateString(dict, fallbackDict, key, args)`, формат `{0}`, `{1}`. В игре остаётся обёртка `tr(key, args)` на одну строку.
+### 6.1. Encoding and Dictionaries
+1. Always save `.jsx` as **UTF-8 with BOM**. ExtendScript displays both Czech/Romanian diacritics (`Čeština`, `Română`) and Devanagari (`हिन्दी`) in `statictext`, `button`, and `dropdownlist`; headings inside `ScriptUIGraphics` are best left in Latin (`SCORE`, `BEST`, `STAGE`).
+2. **Check the BOM.** Without it, Illustrator decodes the file as Windows-1252, and the interface shows `2048 â€¢ Adobe Illustrator Edition`, `ÄŒeÅ¡tina`, `RomÃ¢nÄƒ`, `à¤¹à¤¿à¤¨à¥à¤¦à¥€`. This is the most common "broken interface" in ExtendScript projects: the code still works, so the error is noticed only by appearance.
+   - Entry point → BOM is mandatory when non-ASCII characters are present.
+   - Included file (`lib/`) → BOM is forbidden, keep it ASCII-only.
+   - Any editor or script that rewrites the file can silently strip the BOM — after edits run `node tools/check.js` (it will report an error) or `node tools/check.js --fix` (it will fix it).
+3. The `en / cs / ro / hi` dictionaries must have **the same set of keys** — otherwise `undefined` appears in the interface. This is checked automatically (`check.js`).
+4. Parameter substitution is `translateString(dict, fallbackDict, key, args)`, format `{0}`, `{1}`. The game keeps a one-line `tr(key, args)` wrapper.
 
-Новый служебный ключ, который есть во всех шести динамичных играх: `statusNoHeartbeat` — сообщает, что автономная анимация недоступна.
+A new service key present in all six dynamic games: `statusNoHeartbeat` — reports that autonomous animation is unavailable.
 
-### 6.2. Персистентность без JSON
-Данные лежат в `Folder.userData` в файлах `AI_<Token>_SaveData.txt` в формате `key=value` построчно. Работа с ними вынесена в `lib/GamePersist.jsx`:
+### 6.2. Persistence Without JSON
+Data lives in `Folder.userData` in files `AI_<Token>_SaveData.txt` in line-by-line `key=value` format. Work with them is moved into `lib/GamePersist.jsx`:
 
 ```javascript
-var map = readKeyValueFile(getGameSaveFile("Tetris"));   // объект или null
+var map = readKeyValueFile(getGameSaveFile("Tetris"));   // object or null
 writeKeyValueFile(getGameSaveFile("Tetris"), ["lang=" + currentLang, "best=" + bestScore]);
 ```
 
-Важное разделение, которое нужно сохранять в документации и в шапках файлов:
-- **настройки** (`lang`, `dark`, `best`) сохраняют все игры;
-- **состояние партии** (поле, счёт, текущая фигура) восстанавливают только **2048** и **Tetris**.
+An important distinction that must be preserved in the documentation and in file headers:
+- **settings** (`lang`, `dark`, `best`) are saved by all games;
+- **game state** (board, score, current piece) is restored only by **2048** and **Tetris**.
 
-Писать состояние на каждый шаг нельзя: в Tetris запись 200 клеток на каждый тик гравитации давала ~16 записей в секунду. Используется флаг «грязно»:
+You cannot write state on every step: in Tetris, writing 200 cells on every gravity tick produced ~16 writes per second. A "dirty" flag is used:
 
 ```javascript
-markDirty();        // в moveHorizontal / rotatePiece / softDrop
-flushSave(false);   // из игрового цикла, не чаще раза в 3 с
-flushSave(true);    // при закрытии окна и по кнопке Close
+markDirty();        // in moveHorizontal / rotatePiece / softDrop
+flushSave(false);   // from the game loop, no more than once every 3 s
+flushSave(true);    // on window close and via the Close button
 ```
 
-Дискретные события (новая игра, собранная линия, hold, game over) пишутся сразу.
+Discrete events (new game, completed line, hold, game over) are written immediately.
 
 ---
 
-## 7. Экспорт игровой сцены в вектор на артборд (`❖ To Artboard`)
+## 7. Exporting the Game Scene as Vectors to the Artboard (`❖ To Artboard`)
 
-Главная уникальная возможность игры внутри Adobe Illustrator — превращение текущего кадра в редактируемую векторную иллюстрацию на активной монтажной области:
+The main unique capability of a game inside Adobe Illustrator is turning the current frame into an editable vector illustration on the active artboard:
 
-1. **Проверка открытого документа**: если `app.documents.length === 0`, создать документ через `app.documents.add(DocumentColorSpace.RGB, width, height)`.
-2. **Инверсия оси Y в DOM Illustrator**:
-   - В `ScriptUIGraphics` координата `Y = 0` находится **вверху** и растёт **вниз**.
-   - В документе Illustrator `Y` растёт **снизу вверх** (`top > bottom`).
+1. **Check for an open document**: if `app.documents.length === 0`, create a document via `app.documents.add(DocumentColorSpace.RGB, width, height)`.
+2. **Y-axis inversion in the Illustrator DOM**:
+   - In `ScriptUIGraphics`, the `Y = 0` coordinate is **at the top** and grows **downward**.
+   - In an Illustrator document, `Y` grows **from bottom to top** (`top > bottom`).
    ```javascript
    var abRect = doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect;
    var abCenterX = (abRect[0] + abRect[2]) / 2;
@@ -329,58 +329,58 @@ flushSave(true);    // при закрытии окна и по кнопке Clo
    var startTop  = abCenterY + BOARD_H / 2;
 
    var aiLeft = startLeft + bx;
-   var aiTop  = startTop - by; // Вычитаем Y!
+   var aiTop  = startTop - by; // Subtract Y!
    ```
-3. **Завершение**: группировать объекты в `targetLayer.groupItems.add()`, вызывать `app.redraw()`.
-4. Экспортируется снимок игрового поля; боковая HUD-колонка в вектор **не входит** (у Tetris вместо неё добавляется текстовая строка со счётом, линиями и уровнем).
+3. **Finalization**: group the objects in `targetLayer.groupItems.add()`, call `app.redraw()`.
+4. What is exported is a snapshot of the game field; the side HUD column **is not included** in the vector (for Tetris, a text line with the score, lines, and level is added instead).
 
 ---
 
-## 8. Проверка и приёмка
+## 8. Verification and Acceptance
 
-### Автоматически
+### Automated
 ```powershell
 node tools/check.js
 node tools/test-core.js
 ```
-`check.js` проверяет: разрешимость и отсутствие циклов в `#include`; компиляцию полностью развёрнутого скрипта (`vm.Script`, с номерами строк); запрещённые ES5+ конструкции (строки/комментарии предварительно маскируются, чтобы C#-строки не давали ложных срабатываний); **кодировку** (BOM у точки входа, ASCII-only и без BOM в `lib/`); одинаковый набор i18n-ключей во всех языках; существование ключей, переданных в `tr()`/`setStatus()`; предупреждения о дублях общих функций. Флаг `--fix` добавляет недостающий BOM и снимает лишний у файлов из `lib/`.
+`check.js` verifies: resolvability and absence of cycles in `#include`; compilation of the fully expanded script (`vm.Script`, with line numbers); forbidden ES5+ constructs (strings/comments are masked first so C# strings do not trigger false positives); **encoding** (BOM on the entry point, ASCII-only and BOM-less in `lib/`); identical i18n key sets across all languages; existence of keys passed to `tr()`/`setStatus()`; warnings about duplicate shared functions. The `--fix` flag adds a missing BOM and removes an extra one from `lib/` files.
 
-`test-core.js` исполняет `lib/` в песочнице с поддельным `ScriptUIGraphics` и проверяет геометрию (конечность координат, центрирование строки, число точек), подстановку `{0}`, разбор `key=value` и то, что `heartbeatStart` генерирует корректный C#/`.ps1` (в том числе `IntPtr lpClassName` и префиксный поиск окна).
+`test-core.js` executes `lib/` in a sandbox with a fake `ScriptUIGraphics` and checks geometry (coordinate finiteness, string centering, point counts), `{0}` substitution, `key=value` parsing, and that `heartbeatStart` generates valid C#/`.ps1` (including `IntPtr lpClassName` and prefix window search).
 
-### Лог кадров во время игры
+### Frame Log During Play
 
-Измерять производительность «на глаз» бесполезно: в кадре три подозреваемых сразу — перестройка вёрстки от `statusLbl.text`, `hide()/show()` канваса и сама отрисовка. Поэтому `lib/GamePerf.jsx` пишет `%TEMP%\relax_log_<Игра>.txt` со строкой раз в секунду:
+Measuring performance "by eye" is useless: a frame has three suspects at once — layout rebuild from `statusLbl.text`, canvas `hide()/show()`, and the drawing itself. Therefore `lib/GamePerf.jsx` writes `%TEMP%\relax_log_<Game>.txt` with one line per second:
 
 ```
 [+12.0s] frames=38 fps=38.0 gap_avg=26 gap_max=120 | set=0.2 hs=3.9 draw=9.1 total=13.2 max=52 | keys=1
 ```
 
-Как читать: `hs` велик → виноват `hide/show`; `draw` велик → дорогая геометрия (много `fillPath`); `set` велик → пересчёт вёрстки окна на каждой смене текста; `fps` заметно ниже `1000/tickMs` или `frames` вдвое больше ожидаемого → события приходят пачками и кадр рисуется дважды за тик. Лог включается всегда и стоит одну запись в секунду, в шапке — версия Illustrator, `$.fileName`, размер канваса и `tickMs`.
+How to read it: `hs` is large → `hide/show` is to blame; `draw` is large → expensive geometry (many `fillPath` calls); `set` is large → window layout recalculation on every text change; `fps` noticeably below `1000/tickMs` or `frames` twice the expected value → events arrive in batches and the frame is drawn twice per tick. The log is always on and costs one write per second; the header contains the Illustrator version, `$.fileName`, canvas size, and `tickMs`.
 
-### Вручную (по каждой игре)
-1. Запуск из `File > Scripts`, окно открылось, поле нарисовано.
-2. Клавиши и мышь; для Arkanoid и Space Invaders — ракетка/пушка следует за курсором без рывков.
-3. Автономный ход без движения мыши.
-4. Тема и все 4 языка: нет `□`, обрезки и `undefined`.
-5. Пауза, рестарт.
-6. `❖ To Artboard` — появляется слой с ожидаемым именем.
-7. Закрытие крестиком и кнопкой: в Диспетчере задач не остаётся `powershell.exe` с `AI_*_Heartbeat.ps1`, в `%TEMP%` нет `AI_*_Launcher.vbs`.
-8. Повторный запуск: язык/тема/рекорд восстановлены; у 2048 и Tetris — и партия.
+### Manually (per game)
+1. Launch from `File > Scripts`, the window opens, the field is drawn.
+2. Keys and mouse; for Arkanoid and Space Invaders, the paddle/cannon follows the cursor without jerking.
+3. Autonomous motion without moving the mouse.
+4. Theme and all 4 languages: no `□`, clipping, or `undefined`.
+5. Pause, restart.
+6. `❖ To Artboard` — a layer with the expected name appears.
+7. Closing with the X and with the button: Task Manager has no leftover `powershell.exe` with `AI_*_Heartbeat.ps1`, and `%TEMP%` has no `AI_*_Launcher.vbs`.
+8. Relaunch: language/theme/high score are restored; for 2048 and Tetris, so is the game in progress.
 
 ---
 
-## 9. Короткий список грабель
+## 9. A Short List of Pitfalls
 
-| Грабля | Проявление | Решение |
+| Pitfall | Symptom | Solution |
 |---|---|---|
-| `g.drawString` на Windows | цифры уезжают вниз | векторные глифы (§3.1) |
-| нет таймера | всё замирает без мыши | Win32Heartbeat (§2) |
-| `FindWindow(string, …)` с `$null` | пульс не запускается | `IntPtr` + `IntPtr.Zero` (§2) |
-| глобальная функция вызывает локальную | `ReferenceError`/пустой рендер | передавать `glyphFn` параметром (§3.2) |
-| нет BOM в точке входа | `ÄŒeÅ¡tina`, `â€¢`, `RomÃ¢nÄƒ` в UI | UTF-8 + BOM, `check.js --fix` (§6.1) |
-| BOM в `#include` | `U+FEFF` посреди кода | `lib/` без BOM, только ASCII (§0) |
-| поиск окна по подстроке | пульс в чужое окно | префикс заголовка (§2) |
-| `powerShell -ExecutionPolicy Bypass` | тихо блокируется политикой | `heartbeatStart() === false` + сообщение (§2) |
-| эмодзи в ScriptUI | `□` | только BMP (§4.1) |
-| `statictext` | обрезка текста | ширина и длина строк (§4.2) |
-| запись сейва на каждый кадр | рывки | `markDirty` / `flushSave` (§6.2) |
+| `g.drawString` on Windows | digits drift downward | vector glyphs (§3.1) |
+| no timer | everything freezes without the mouse | Win32Heartbeat (§2) |
+| `FindWindow(string, …)` with `$null` | the pulse does not start | `IntPtr` + `IntPtr.Zero` (§2) |
+| a global function calls a local one | `ReferenceError`/empty render | pass `glyphFn` as a parameter (§3.2) |
+| no BOM in the entry point | `ÄŒeÅ¡tina`, `â€¢`, `RomÃ¢nÄƒ` in the UI | UTF-8 + BOM, `check.js --fix` (§6.1) |
+| BOM in `#include` | `U+FEFF` in the middle of code | `lib/` without BOM, ASCII only (§0) |
+| window search by substring | pulse goes to someone else's window | title prefix (§2) |
+| `powerShell -ExecutionPolicy Bypass` | silently blocked by policy | `heartbeatStart() === false` + message (§2) |
+| emoji in ScriptUI | `□` | BMP only (§4.1) |
+| `statictext` | text clipping | width and line length (§4.2) |
+| saving every frame | stutter | `markDirty` / `flushSave` (§6.2) |
