@@ -42,7 +42,7 @@ Every screenshot below is the real ScriptUI window, drawn by the game itself —
 
 The launcher is the entry point: one window with all eight games, hotkeys `1`–`8`, a random pick, and shortcuts to the docs, the game folder and the runtime logs.
 
-<img src="screenshots/launcher.png" width="420" alt="RELAX launcher with the eight games">
+<img src="screenshots/launcher-arcade.png" width="420" alt="RELAX launcher with the eight games">
 
 1. Download or clone this repository (**keep the folder intact — the games share `lib/`**).
 2. In Illustrator open `File > Scripts > Other Script…` and pick **`Play Arcade.jsx`**.
