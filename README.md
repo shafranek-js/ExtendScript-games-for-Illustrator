@@ -1,118 +1,111 @@
 # ExtendScript Games for Adobe Illustrator
 
-Seven playable games that run **inside Adobe Illustrator** — pure ExtendScript + ScriptUI, drawn with `ScriptUIGraphics`, no raster assets and no plugins.
+Seven complete games that run **inside Adobe Illustrator** — pure ExtendScript (ES3) + ScriptUI, drawn pixel by pixel with `ScriptUIGraphics`, no raster assets, no plugins.
 
-**Quick start:** download the repo, then in Illustrator open `File > Scripts > Other Script…` → `Play Arcade.jsx`. Pick a game by clicking its title or pressing `1`–`7`. Closing a game brings the launcher back.
+The games are the visible part. The real subject of this repository is **what the Illustrator scripting engine can actually do**: no timers, no fonts you can trust, no JSON, no frameworks — and still a real-time loop, a vector font renderer, a four-language UI and one-click export of the game scene to an editable artboard.
 
-- Tested on Illustrator 2021–2026 (Windows).
-- Autonomous animation (the heartbeat that keeps objects moving) is Windows-only; on macOS a game advances while you move the mouse, and the status bar says so.
-- `node tools/check.js` and `node tools/test-core.js` — static checks for syntax, encoding and i18n; Illustrator not required.
-
-Русская документация — ниже.
+> Treat this as a capability test of ExtendScript for Illustrator, not as a shipped product.
 
 ---
 
-# relax — аркадные игры для Adobe Illustrator (ExtendScript + ScriptUI)
+## What it demonstrates
 
-Семь законченных игр, которые запускаются прямо внутри Illustrator и рисуются на `ScriptUIGraphics` без единого растрового ассета. Любую игровую сцену можно одним кликом превратить в редактируемый вектор на активной монтажной области.
-
-| Игра | Файл | Что интересного |
+| Capability | How it is done | Where |
 |---|---|---|
-| 2048 | `2048.jsx` | пошаговая, свайпы, 4×4, восстановление партии |
-| Tetris | `Tetris.jsx` | 10×20, 7-bag, ghost piece, hold, восстановление партии |
-| Arkanoid | `Arkanoid.jsx` | физика отскоков, 5 уровней, 5 капсул, лазеры, управление мышью |
-| Snake | `Snake.jsx` | очередь поворотов, 3 режима арены, градиентное тело |
-| Space Invaders | `SpaceInvaders.jsx` | строй 5×9, двухкадровая анимация, бункеры, UFO |
-| Boulder Dash | `BoulderDash.jsx` | клеточная физика валунов, ИИ монстров, 5 пещер |
-| Pac-Man | `PacMan.jsx` | лабиринт 19×21, 4 призрака, режим «испуга» |
+| **Real-time animation without timers** | Illustrator has no `setInterval`. A hidden PowerShell process compiles a small C# class (`Add-Type`) and posts `WM_MOUSEMOVE` + `F15` to the dialog every 25–40 ms, waking the ExtendScript engine. | [`lib/GameHeartbeat.jsx`](lib/GameHeartbeat.jsx) |
+| **Own vector font** | `Graphics.drawString()` miscalculates baseline and metrics on Windows. Every glyph is built from two primitives — a round-capped capsule and an arc band — and centred mathematically. Zero `drawString` calls in the codebase. | [`lib/GameCore.jsx`](lib/GameCore.jsx), per-game `drawVectorGlyph` |
+| **Immediate-mode rendering** | Rounded rectangles via 16-point trigonometric approximation (there are no Bézier curves), geometric circles, diamonds and 2.5D blocks. Static geometry is batched into a single `fillPath` — the Boulder Dash cave went from ~1200 fills per frame to 13. | [`lib/GameCore.jsx`](lib/GameCore.jsx) |
+| **Smooth motion on a cell grid** | Logic steps 6–7 times per second; the canvas repaints at ~30 fps with interpolated positions, so sprites glide between cells instead of jumping. Teleports (warp tunnels, eaten ghosts) are deliberately not animated. | [`lib/GameAnim.jsx`](lib/GameAnim.jsx) |
+| **Four-language UI** | English, Czech, Romanian and Hindi dictionaries in every game, including Devanagari. Illustrator decodes a BOM-less `.jsx` as Windows-1252, so encoding is part of the build contract. | per-game `I18N`, [`lib/GameI18n.jsx`](lib/GameI18n.jsx) |
+| **Persistence without JSON** | `JSON` does not exist in ES3. Saves and settings are `key=value` lines in `Folder.userData`, written through a small shared helper. | [`lib/GamePersist.jsx`](lib/GamePersist.jsx) |
+| **Export to an editable artboard** | The current frame becomes real Illustrator paths and text on a new layer, with the Y axis inverted (ScriptUI grows downwards, the DOM grows upwards). | each game's `export…ToArtboard()` |
+| **Static verification** | A Node gate resolves `#include`, compiles the fully inlined script, rejects ES5+ syntax, checks the BOM rules and i18n key parity; a second tool runs the drawing core in a sandbox with a fake `ScriptUIGraphics`. | [`tools/check.js`](tools/check.js), [`tools/test-core.js`](tools/test-core.js) |
+| **Runtime diagnostics** | Every game writes a frame-timing log (status label / hide-show / drawing) to `%TEMP%\relax_log_<Game>.txt`, which is how the 6–7 fps cadence was measured and fixed. | [`lib/GamePerf.jsx`](lib/GamePerf.jsx) |
+| **Launcher without `#include` support** | `$.evalFile()` is not documented to preprocess `#include`, so the launcher inlines the sources itself into a temporary single-file bundle and runs that. | [`Play Arcade.jsx`](Play%20Arcade.jsx) |
 
-## Как запустить
+## Screenshots
 
-**Самый простой способ — лаунчер:** `File > Scripts > Other Script…` → `Play Arcade.jsx`.
+| Launcher | 2048 |
+|---|---|
+| ![Launcher](screenshots/launcher.png) | ![2048](screenshots/2048.png) |
 
-Откроется одно окно со всеми играми: клик по названию или клавиши `1–7`, `★ Random` для случайной игры, `Folder` открывает папку, `❖ Docs` — этот README. После закрытия игры лаунчер возвращается, так что следующую можно запустить сразу. `Esc` — выход.
+| Arkanoid | Snake |
+|---|---|
+| ![Arkanoid](screenshots/arkanoid.png) | ![Snake](screenshots/snake.png) |
 
-Лаунчер не зависит от `#include`: он сам разворачивает подключаемые файлы в один временный скрипт и запускает его, поэтому ошибки в `lib/` не мешают ему хотя бы показать сообщение.
+| Space Invaders | Boulder Dash |
+|---|---|
+| ![Space Invaders](screenshots/space-invaders.png) | ![Boulder Dash](screenshots/boulder-dash.png) |
 
-**Запуск отдельной игры напрямую:** `File > Scripts > Other Script…` → выбрать `.jsx` игры (или положите папку `relax` в `Presets/Scripts`, тогда `File > Scripts > relax > …`).
+| Pac-Man | Tetris |
+|---|---|
+| ![Pac-Man](screenshots/pac-man.png) | *screenshot pending* |
 
-Управление: стрелки/WASD, `Space`, `Esc` для закрытия. Мышь работает в Arkanoid и Space Invaders, свайпы — в 2048, Snake, Boulder Dash, Tetris.
+## The games
 
-**Папку `lib/` нужно копировать вместе с играми** — игры подключают её через `#include`. Скопированный в одиночку `.jsx` не запустится.
+| Game | File | Genre | What is interesting in it |
+|---|---|---|---|
+| **2048** | `2048.jsx` | Puzzle | Swipe gestures, tile merging, full game state restored between sessions |
+| **Tetris** | `Tetris.jsx` | Classic | 7-bag randomizer, wall kicks, ghost piece, hold/next preview, smooth falling piece |
+| **Arkanoid** | `Arkanoid.jsx` | Action | Continuous physics, 5 stages, 5 power-up capsules, lasers, mouse-driven paddle |
+| **Snake** | `Snake.jsx` | Arcade | Turn queue, 3 arena modes (walls / portals / labyrinth), gradient body |
+| **Space Invaders** | `SpaceInvaders.jsx` | Shooter | 5×9 swarm with two-frame animation, eroding bunkers, mystery UFO |
+| **Boulder Dash** | `BoulderDash.jsx` | Logic | Cell gravity for boulders and gems, monster AI, 5 hand-built caves |
+| **Pac-Man** | `PacMan.jsx` | Arcade | 19×21 maze, four ghosts with different personalities, frightened mode |
 
-## Структура
+## Quick start
+
+1. Download or clone this repository (**keep the folder intact — the games share `lib/`**).
+2. In Illustrator open `File > Scripts > Other Script…` and pick **`Play Arcade.jsx`**.
+3. Click a game title or press `1`–`7`. Closing a game brings the launcher back.
+
+Running a single game directly works too: `File > Scripts > Other Script…` → e.g. `Tetris.jsx`.
+
+**Controls:** arrows / WASD to move, `Space` for the primary action, `Esc` to close. Mouse steers in Arkanoid and Space Invaders; swipes and clicks work in 2048, Snake, Boulder Dash and Tetris.
+
+## How it works
+
+The full engineering notes — including the platform traps that shaped this code — are in **[EXTENDSCRIPT_GAME_DEV_GUIDE.md](EXTENDSCRIPT_GAME_DEV_GUIDE.md)**. Short version:
+
+- **No timer in Illustrator.** A PowerShell process posts synthetic events into the modal dialog; the game reacts to them. It keeps running while Illustrator is in the background, pauses when the window is minimised, and never moves the real cursor unless the game window has focus.
+- **No trustworthy text rendering.** Everything on the canvas is geometry; ScriptUI `statictext` is used only for labels outside the canvas.
+- **ES3 only** — `var`, loops, no `let`/`const`, no `JSON`, no `Array#forEach`. A static gate enforces this.
+- **Encoding matters.** Entry scripts are UTF-8 **with BOM**; included `lib/` files are ASCII and BOM-less.
+
+## Repository layout
 
 ```
-Play Arcade.jsx        лаунчер: меню всех игр, хоткеи 1-7, Random
-lib/GameCore.jsx       цвет, скругления, капсулы, дуги, прогон глифов
-lib/GameHeartbeat.jsx  автономный цикл (PowerShell + C#), Windows
-lib/GamePersist.jsx    key=value в Folder.userData
-lib/GameI18n.jsx       подстановка {0}
-tools/check.js         статическая проверка всех игр и lib
-tools/test-core.js     прогон ядра в песочнице (геометрия, i18n, heartbeat)
-tools/migrate.js       механические правки (служебный)
-_baseline_20261107/    локальный снимок до рефакторинга (в git не входит, не запускать)
+Play Arcade.jsx      launcher: menu for all games (1-7, Random, Docs, Logs)
+2048.jsx … Tetris.jsx  seven games
+lib/                 shared engine: drawing core, heartbeat, animation, persistence, i18n, diagnostics
+tools/               static gate, core tests, mechanical refactoring helper
+screenshots/         UI captures used in this README
+README.md            this file
+TESTING.md           test plan: coverage matrix, cases A-01 … K-03, acceptance checklist
+AGENTS.md            conventions for contributors
+EXTENDSCRIPT_GAME_DEV_GUIDE.md  the engineering write-up
 ```
 
-## Проверка
+## Verification
 
 ```powershell
-node tools/check.js      # синтаксис, ES3, #include, кодировка/BOM, i18n, дубли
-node tools/check.js --fix # починить BOM на месте
-node tools/test-core.js  # геометрия ядра, подстановки, генерация heartbeat
+node tools/check.js        # ES3 syntax, #include resolution, UTF-8 BOM rules, i18n key parity
+node tools/check.js --fix  # repair BOM problems in place
+node tools/test-core.js    # drawing core, {0} substitution, save parsing, heartbeat generation
 ```
 
-`check.js` ловит синтаксические ошибки ExtendScript сразу, без запуска Illustrator. `test-core.js` исполняет `lib/` в песочнице с поддельным `ScriptUIGraphics` и проверяет математику рисования, разбор сохранений и корректность генерируемого PowerShell/C#.
+Both run on Node alone — Illustrator is not required. The runtime test is manual: see [TESTING.md](TESTING.md) (Smoke run ≈ 25 min, Full run ≈ 2.5 h).
 
-## Ограничения
+## Requirements and known limitations
 
-- **Автономная анимация — только Windows.** Реализована через скрытый PowerShell-процесс, который посылает окну `WM_MOUSEMOVE` и `F15`. На macOS игра работает, но шагает только когда вы двигаете мышь; об этом сообщает статус-строка.
-- На машинах с политикой, запрещающей `powershell.exe -ExecutionPolicy Bypass` или `wscript.exe`, таймер не запустится — игра покажет сообщение и останется управляемой, но без автохода.
-- Игры должны запускаться модальным окном (`dialog`); это ограничение платформы, а не дизайна.
-- **Кодировка.** Illustrator читает `.jsx` без BOM как Windows-1252, поэтому файлы игр сохранены в UTF-8 **с BOM**. Если после правки интерфейс показывает `ÄŒeÅ¡tina` / `â€¢` / `RomÃ¢nÄƒ` — BOM потерялся: `node tools/check.js --fix`. Файлы в `lib/` наоборот держите ASCII-only и **без BOM**.
+- **Adobe Illustrator 2021+** — developed and tested on Illustrator 2026 (Windows, ES3 engine).
+- **Windows** for autonomous animation. On macOS the heartbeat is unavailable: the game still runs, but advances only while the mouse moves, and the status bar says so.
+- Corporate machines may block `powershell.exe -ExecutionPolicy Bypass` or `wscript.exe`; the game then reports that the timer is unavailable instead of silently freezing.
+- The games are modal dialogs by design — that is the only reliable way to keep an ExtendScript window alive.
+- No licence file yet: the code is published for reference and evaluation.
 
-## Где лежат сохранения
+## Documentation
 
-`Folder.userData` (`%APPDATA%\Adobe\InDesign`-подобная папка Illustrator):
-
-```
-AI_2048_SaveData.txt
-AI_Tetris_SaveData.txt
-AI_Arkanoid_SaveData.txt
-AI_Snake_SaveData.txt
-AI_SpaceInvaders_SaveData.txt
-AI_BoulderDash_SaveData.txt
-AI_PacMan_SaveData.txt
-```
-
-Формат — `key=value`, по строке на ключ. Удаление файла сбрасывает рекорд/язык/тему; у 2048 и Tetris — и сохранённую партию.
-
-## Диагностика и логи
-
-Каждая игра пишет лог кадров в `%TEMP%\relax_log_<Игра>.txt` (кнопка **Logs** в лаунчере открывает эту папку). Файл перезаписывается при каждом запуске игры.
-
-Раз в секунду пишется строка вида:
-
-```
-[+12.0s] frames=38 fps=38.0 gap_avg=26 gap_max=120 | set=0.2 hs=3.9 draw=9.1 total=13.2 max=52 | keys=1
-```
-
-| Поле | Что означает |
-|---|---|
-| `frames`, `fps` | сколько раз за секунду перерисовался канвас |
-| `gap_avg`, `gap_max` | средний/максимальный интервал между кадрами, мс |
-| `set` | время на `statusLbl.text` (пересчёт вёрстки окна) |
-| `hs` | время на `gameCanvas.hide()/show()` |
-| `draw` | время на `notify("onDraw")` — собственно рисование |
-| `total`, `max` | полное время кадра, среднее и максимум |
-| `keys` | нажатий клавиш за секунду |
-
-В шапке файла — окружение: версия Illustrator, ОС, путь запуска (`$.fileName` покажет, запущена игра напрямую или через бандл лаунчера), размер канваса, `tickMs`, тема и язык. События (сбой таймера, экспорт) пишутся строками `[+12.0s] ...`.
-
-Если игра «лагает», лог сразу показывает, что именно медленно: `hs` — пересоздание окна, `draw` — сложная отрисовка, `set` — перестройка вёрстки, большой `gap` при малом `total` — простой вне кадра (логика или ожидание событий).
-
-## Документация
-
-- `EXTENDSCRIPT_GAME_DEV_GUIDE.md` — подробный разбор платформенных ловушек и рецептов (таймер, векторный шрифт, вёрстка, локализация, экспорт на артборд).
-- `TESTING.md` — план тестирования: матрица покрытия, тест-кейсы по ID, критерии приёмки, известные ограничения.
-- `AGENTS.md` — соглашения по коду и чек-лист проверки.
+- **[EXTENDSCRIPT_GAME_DEV_GUIDE.md](EXTENDSCRIPT_GAME_DEV_GUIDE.md)** — the platform traps and the recipes that solve them (timer, vector font, batching, interpolation, encoding, export). Written in Russian.
+- **[TESTING.md](TESTING.md)** — test plan with case IDs and an acceptance checklist. Written in Russian.
+- **[AGENTS.md](AGENTS.md)** — coding conventions, encoding contract, review expectations.
