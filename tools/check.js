@@ -269,6 +269,7 @@ const SHARED_SYMBOLS = [
 ];
 
 function checkDuplication(gameFile, label) {
+    if (/_standalone\.jsx$/i.test(gameFile)) return;
     const src = readText(gameFile);
     const dups = SHARED_SYMBOLS.filter((sym) => new RegExp("function\\s+" + sym + "\\s*\\(").test(src));
     if (dups.length) {
