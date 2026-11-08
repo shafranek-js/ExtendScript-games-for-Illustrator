@@ -62,7 +62,7 @@ Check: `node tools/check.js` and `node tools/test-core.js` (see §8).
 
 ### 0.1. The Launcher and Why It Builds a "Bundle"
 
-`Play Arcade.jsx` does not rely on `$.evalFile()` being able to handle `#include` (this behavior is undocumented anywhere). It reads the `.jsx`, recursively substitutes the contents of files for `#include "…"`, strips `#target`, writes a single temporary script to `Folder.temp`, and runs it via `$.evalFile()`. After a successful launch the temporary file is deleted; on error it is left behind for debugging. A side benefit: the same method can produce a standalone `.jsx` to hand to a colleague.
+`Play Arcade.jsx` does not rely on `$.evalFile()` being able to handle `#include` (this behavior is undocumented anywhere). It reads the `.jsx`, recursively replaces `#include "…"` with the contents of the files, strips `#target`, writes a single temporary script to `Folder.temp`, and runs it via `$.evalFile()`. After a successful launch the temporary file is deleted; on error it is left behind for debugging. A side benefit: the same method can produce a standalone `.jsx` to hand to a colleague.
 
 ---
 
@@ -95,9 +95,9 @@ Every `25–40 ms` the background process checks whether the game window still e
 
 **Background behavior.** The game continues even if Illustrator is minimized behind another window: it must not stop on focus loss, otherwise a player who switches to another program for a minute returns to a "frozen" game. The timer stops only when the game window is invisible (Illustrator is minimized) — `if (!IsWindowVisible(hwnd)) return;`.
 
-At the same time, the micro cursor movement (`mouse_event`) is performed **only when the game window is focused**: otherwise the pulse would tug at the pointer while you work in another application. Engine wake-up (`WM_MOUSEMOVE` + `F15`) always happens.
+At the same time, the tiny cursor shift (`mouse_event`) is performed **only when the game window is focused**: otherwise the pulse would jostle the pointer while you work in another application. Engine wake-up (`WM_MOUSEMOVE` + `F15`) always happens.
 
-The game connects this in two lines:
+The game hooks this up with two handlers:
 
 ```javascript
 var HB = { title: WIN_TITLE, token: "Tetris", tickMs: 40 };   // title = WIN_TITLE of the window
@@ -156,7 +156,7 @@ An exact title match is tried first. If none is found (the window has not been c
 Three files are created per game in `Folder.temp`: `AI_<Token>_Heartbeat.ps1`, `AI_<Token>_Launcher.vbs`, `AI_<Token>_Stop.flag`. `heartbeatStop()` writes the flag and deletes `.ps1`/`.vbs` (if PowerShell is still reading the file, deletion fails silently; the next launch overwrites it). The PowerShell process exits by itself based on `IsWindow(hwnd)` and the flag, so no "hanging" processes remain.
 
 ### Platform Limitations
-- **Windows-only.** On macOS `heartbeatStart()` returns `false` and the game shows `statusNoHeartbeat`: animation is possible only while the user moves the mouse. There is no more silent "freezing".
+- **Windows-only.** On macOS `heartbeatStart()` returns `false` and the game shows `statusNoHeartbeat`: animation is possible only while the user moves the mouse. Silent "freezing" is no longer possible.
 - **Corporate policies.** The chain `wscript.exe` → `powershell -ExecutionPolicy Bypass` → `Add-Type` + `PostMessage`/`mouse_event` is exactly the profile EDR/antivirus flags. If PowerShell or VBScript is blocked by Group Policy, `heartbeatStart()` returns `false` (the game reports this) but does not "break".
 - **Start delay.** `Add-Type` compiles C# on every launch (~1–2 s); that is why the process is launched asynchronously and does not block window opening.
 
@@ -171,7 +171,7 @@ In the Windows implementation of `ScriptUIGraphics` in Adobe Illustrator, there 
 - As the font size grows, digits shift far downward and press against the bottom edge of the tile or spill beyond it.
 - The offset depends nonlinearly on the string length and the configured system DPI scaling.
 
-**Solution**: a complete rejection of `g.drawString()` inside the game canvas — **all 7 games have zero `drawString` calls**. Instead, a custom geometric character renderer is used, built on two primitives from `lib/GameCore.jsx`:
+**Solution**: a complete ban on `g.drawString()` inside the game canvas — **all 7 games have zero `drawString` calls**. Instead, a custom geometric character renderer is used, built on two primitives from `lib/GameCore.jsx`:
 1. **`fillCapsule(g, x1, y1, x2, y2, r, brush)`** — a segment of arbitrary slope with rounded ends of radius `r`.
 2. **`fillArcBand(g, cx, cy, rMid, rThick, startDeg, endDeg, brush)`** — a smooth arc of the given thickness with rounded ends.
 
@@ -216,7 +216,7 @@ if (animDue(33)) refreshUI();     // draw pulse ~30 fps between steps
 
 `animLerp` intentionally does not animate a jump of more than one cell: a tunnel teleport, an eaten ghost, or a piece "landing" is drawn instantly.
 
-The second half of the technique is **batching**: at 30 fps you cannot draw cell by cell. `fillBatchRects` / `fillBatchCircles` from `lib/GameCore.jsx` collect N shapes into a single path and make one `fillPath`: the Pac-Man maze went from ~340 fills to 4; Boulder Dash cells went from ~1200 to 13.
+The second half of the technique is **batching**: at 30 fps you cannot draw cell by cell. `fillBatchRects` / `fillBatchCircles` from `lib/GameCore.jsx` collect N shapes into a single path and issue a single `fillPath`: the Pac-Man maze went from ~340 fills to 4; Boulder Dash cells went from ~1200 to 13.
 
 ### 3.4. Reliable Screen Redraw (`refreshUI`)
 
@@ -280,7 +280,7 @@ The custom `Group` area (`gameCanvas`) does not take keyboard focus on a mouse c
 
 ### 6.1. Encoding and Dictionaries
 1. Always save `.jsx` as **UTF-8 with BOM**. ExtendScript displays both Czech/Romanian diacritics (`Čeština`, `Română`) and Devanagari (`हिन्दी`) in `statictext`, `button`, and `dropdownlist`; headings inside `ScriptUIGraphics` are best left in Latin (`SCORE`, `BEST`, `STAGE`).
-2. **Check the BOM.** Without it, Illustrator decodes the file as Windows-1252, and the interface shows `2048 â€¢ Adobe Illustrator Edition`, `ÄŒeÅ¡tina`, `RomÃ¢nÄƒ`, `à¤¹à¤¿à¤¨à¥à¤¦à¥€`. This is the most common "broken interface" in ExtendScript projects: the code still works, so the error is noticed only by appearance.
+2. **Check the BOM.** Without it, Illustrator decodes the file as Windows-1252, and the interface shows `2048 â€¢ Adobe Illustrator Edition`, `ÄŒeÅ¡tina`, `RomÃ¢nÄƒ`, `à¤¹à¤¿à¤¨à¥à¤¦à¥€`. This is the most common "broken interface" in ExtendScript projects: the code still works, so the error is noticed only visually.
    - Entry point → BOM is mandatory when non-ASCII characters are present.
    - Included file (`lib/`) → BOM is forbidden, keep it ASCII-only.
    - Any editor or script that rewrites the file can silently strip the BOM — after edits run `node tools/check.js` (it will report an error) or `node tools/check.js --fix` (it will fix it).
@@ -290,7 +290,7 @@ The custom `Group` area (`gameCanvas`) does not take keyboard focus on a mouse c
 A new service key present in all six dynamic games: `statusNoHeartbeat` — reports that autonomous animation is unavailable.
 
 ### 6.2. Persistence Without JSON
-Data lives in `Folder.userData` in files `AI_<Token>_SaveData.txt` in line-by-line `key=value` format. Work with them is moved into `lib/GamePersist.jsx`:
+Data lives in `Folder.userData` in files `AI_<Token>_SaveData.txt` in line-by-line `key=value` format. The code that handles them is isolated in `lib/GamePersist.jsx`:
 
 ```javascript
 var map = readKeyValueFile(getGameSaveFile("Tetris"));   // object or null
@@ -315,7 +315,7 @@ Discrete events (new game, completed line, hold, game over) are written immediat
 
 ## 7. Exporting the Game Scene as Vectors to the Artboard (`❖ To Artboard`)
 
-The main unique capability of a game inside Adobe Illustrator is turning the current frame into an editable vector illustration on the active artboard:
+The standout capability of a game inside Adobe Illustrator is turning the current frame into an editable vector illustration on the active artboard:
 
 1. **Check for an open document**: if `app.documents.length === 0`, create a document via `app.documents.add(DocumentColorSpace.RGB, width, height)`.
 2. **Y-axis inversion in the Illustrator DOM**:
@@ -343,7 +343,7 @@ The main unique capability of a game inside Adobe Illustrator is turning the cur
 node tools/check.js
 node tools/test-core.js
 ```
-`check.js` verifies: resolvability and absence of cycles in `#include`; compilation of the fully expanded script (`vm.Script`, with line numbers); forbidden ES5+ constructs (strings/comments are masked first so C# strings do not trigger false positives); **encoding** (BOM on the entry point, ASCII-only and BOM-less in `lib/`); identical i18n key sets across all languages; existence of keys passed to `tr()`/`setStatus()`; warnings about duplicate shared functions. The `--fix` flag adds a missing BOM and removes an extra one from `lib/` files.
+`check.js` verifies: that every `#include` resolves and that there are no cycles; compilation of the fully expanded script (`vm.Script`, with line numbers); forbidden ES5+ constructs (strings/comments are masked first so C# strings do not trigger false positives); **encoding** (BOM on the entry point, ASCII-only and BOM-less in `lib/`); identical i18n key sets across all languages; existence of keys passed to `tr()`/`setStatus()`; warnings about duplicate shared functions. The `--fix` flag adds a missing BOM and removes an extra one from `lib/` files.
 
 `test-core.js` executes `lib/` in a sandbox with a fake `ScriptUIGraphics` and checks geometry (coordinate finiteness, string centering, point counts), `{0}` substitution, `key=value` parsing, and that `heartbeatStart` generates valid C#/`.ps1` (including `IntPtr lpClassName` and prefix window search).
 
