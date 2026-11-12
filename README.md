@@ -1,6 +1,8 @@
 # ExtendScript Games for Adobe Illustrator
 
-Twelve complete games that run **inside Adobe Illustrator** — pure ExtendScript (ES3) + ScriptUI, drawn pixel by pixel with `ScriptUIGraphics`, no raster assets, no plugins.
+> **Play online (GitHub Pages):** https://shafranek-js.github.io/ExtendScript-games-for-Illustrator/
+
+Twelve complete games that run **inside Adobe Illustrator** (pure ExtendScript ES3 + ScriptUI, drawn pixel by pixel with `ScriptUIGraphics`, no raster assets, no plugins) — and now also **live in your browser** via a lightweight Canvas 2D ScriptUI runtime on **[GitHub Pages](https://shafranek-js.github.io/ExtendScript-games-for-Illustrator/)**.
 
 The games are the visible part. The real subject of this repository is **what the Illustrator scripting engine can actually do**: no timers, no fonts you can trust, no JSON, no frameworks — and still a real-time loop, a vector font renderer, a four-language UI and one-click export of the game scene to an editable artboard.
 
@@ -22,6 +24,7 @@ The games are the visible part. The real subject of this repository is **what th
 | **Static verification** | A Node gate resolves `#include`, compiles the fully inlined script, rejects ES5+ syntax, checks the BOM rules and i18n key parity; a second tool runs the drawing core in a sandbox with a fake `ScriptUIGraphics`. | [`tools/check.js`](tools/check.js), [`tools/test-core.js`](tools/test-core.js) |
 | **Runtime diagnostics** | Every game writes a frame-timing log (status label / hide-show / drawing) to `%TEMP%\relax_log_<Game>.txt`, which is how the 6–7 fps cadence was measured and fixed. | [`lib/GamePerf.jsx`](lib/GamePerf.jsx) |
 | **Launcher without `#include` support** | `$.evalFile()` is not documented to preprocess `#include`, so the launcher inlines the sources itself into a temporary single-file bundle and runs that. | [`Play Arcade.jsx`](Play%20Arcade.jsx) |
+| **Browser Canvas 2D runtime** | `web/build.mjs` compiles all 12 `.jsx` games into ES modules backed by a `ScriptUIGraphics` → Canvas 2D shim, `localStorage` saves, fullscreen scaling and touch controls. | [`web/`](web/), [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml) |
 
 ## The games
 
@@ -43,6 +46,18 @@ Every screenshot below is the real ScriptUI window, drawn by the game itself —
 | <img src="screenshots/sokoban.png" width="150" alt="Sokoban"> | **Sokoban**<br>`Sokoban.jsx` | Logic | 20 solver-verified crate puzzles, unlimited in-play Undo, BFS click-to-move, per-stage best moves/pushes saved |
 
 ## Quick start
+
+### Option 1: Play in your browser
+
+Open **[Relax Arcade on GitHub Pages](https://shafranek-js.github.io/ExtendScript-games-for-Illustrator/)** — all 12 games run directly on HTML5 Canvas with genre filters, local high-score badges (`localStorage`), per-game control legends, responsive fullscreen mode and touch D-pad support.
+
+To build the browser bundle locally into `web/dist/`:
+
+```powershell
+node web/build.mjs
+```
+
+### Option 2: Run in Adobe Illustrator
 
 The launcher is the entry point: one window with all twelve games, hotkeys `1`–`9`, `0`, `A`, `B`, a random pick, and shortcuts to the docs, the game folder and the runtime logs.
 
@@ -86,6 +101,7 @@ The full engineering notes — including the platform traps that shaped this cod
 Play Arcade.jsx             launcher: menu for all 12 games (1-9, 0, A, B, Random, Docs, Logs)
 2048.jsx … Sokoban.jsx     twelve modular games (require lib/)
 standalone/                self-contained single-file builds (*_standalone.jsx, zero dependencies)
+web/                       browser arcade UI, Canvas 2D ScriptUI shim (host.js) and bundle builder (build.mjs)
 lib/                       shared engine: drawing core, heartbeat, animation, persistence, i18n, diagnostics
 tools/                 static gate, core tests, headless logic/render tests, level importer, standalone builder
 screenshots/           UI captures used in this README
@@ -106,8 +122,9 @@ node tools/loderunner-headless.js # 37 headless tests for Lode Runner mechanics 
 node tools/xonix-headless.js      # 12 headless tests for Xonix flood-fill, patrols & vector rendering
 node tools/bomberman-headless.js  # 12 headless tests for Bomberman blasts, powerups, foes & portal
 node tools/battlecity-headless.js # 11 headless tests for Battle City terrain, HQ, upgrades & tanks
-node tools/sokoban-headless.js    # Sokoban solver, gameplay, rendering and dialog lifecycle checks
+node tools/sokoban-headless.js    # 14 headless checks: solver, gameplay, UI lifecycle & rendering
 node tools/make-standalone.js --all # rebuild all standalone single-file bundles in standalone/
+node web/build.mjs                # bundle all 12 games into web/dist/ for GitHub Pages / local preview
 ```
 
 The commands above run on Node alone. For checks in Illustrator, see [TESTING.md](TESTING.md) (Smoke run ≈ 25 min, Full run ≈ 2.5 h).
