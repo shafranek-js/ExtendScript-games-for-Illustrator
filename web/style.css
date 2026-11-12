@@ -35,8 +35,23 @@ button { cursor: pointer; }
 .card h2 { font-size: 1.25rem; margin: 4px 0; }
 .card p { color: var(--muted); font-size: .85rem; margin: 0; line-height: 1.4; }
 .back { display: inline-block; margin-bottom: 14px; color: var(--accent); }
-#play h1 { font-size: clamp(2rem, 5vw, 3rem); margin-bottom: 20px; }
-#game { display: grid; justify-items: start; }
+#play h1 { font-size: clamp(2rem, 5vw, 3rem); margin-bottom: 20px; text-align: center; }
+.game-toolbar { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.game-toolbar:has(button:not([hidden])) { margin-bottom: 12px; }
+.game-toolbar p { margin: 0; color: #ff9a98; }
+#game { display: grid; justify-items: center; }
+#game-stage:fullscreen {
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
+    overflow: auto;
+    background: #10131a;
+}
+#game-stage:fullscreen #game { margin-block: auto; }
+#game-stage:fullscreen .game-dialog { width: 100%; max-width: max-content; }
+#game-stage:fullscreen .game-canvas {
+    width: min(calc(100vw - 52px), calc(max(100px, 100dvh - 166px) * var(--fullscreen-width-factor)));
+}
 .game-dialog { max-width: 100%; border: 1px solid var(--line); border-radius: 12px; background: #1a202b; padding: 12px; }
 .game-dialog, .game-group { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
 .game-group[data-orientation="row"] { flex-direction: row; flex-wrap: wrap; justify-content: center; }

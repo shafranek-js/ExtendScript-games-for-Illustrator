@@ -20,7 +20,13 @@
         <section id="play" hidden>
             <a class="back" href="#">← All games</a>
             <h1 id="game-title" tabindex="-1"></h1>
-            <div id="game"></div>
+            <div id="game-stage">
+                <div class="game-toolbar">
+                    <button id="fullscreen" class="game-button" type="button" hidden>Full screen</button>
+                    <p id="fullscreen-error" role="status" hidden></p>
+                </div>
+                <div id="game"></div>
+            </div>
         </section>
         <p id="error" role="alert" hidden></p>
     </main>

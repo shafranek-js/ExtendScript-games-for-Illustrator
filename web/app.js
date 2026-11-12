@@ -3,13 +3,35 @@ import { createHost } from "./host.js";
 const catalog = document.querySelector("#catalog");
 const gameList = document.querySelector("#games");
 const play = document.querySelector("#play");
+const stage = document.querySelector("#game-stage");
 const gameRoot = document.querySelector("#game");
+const fullscreen = document.querySelector("#fullscreen");
+const fullscreenError = document.querySelector("#fullscreen-error");
 const title = document.querySelector("#game-title");
 const error = document.querySelector("#error");
 const random = document.querySelector("#random");
 let revision = 0;
 let host;
 let games = [];
+
+function syncFullscreen() {
+    const active = document.fullscreenElement === stage;
+    fullscreen.textContent = active ? "Exit full screen" : "Full screen";
+    gameRoot.querySelector(".game-dialog")?.focus({ preventScroll: true });
+}
+
+fullscreen.addEventListener("click", async () => {
+    fullscreenError.hidden = true;
+    try {
+        if (document.fullscreenElement === stage) await document.exitFullscreen();
+        else await stage.requestFullscreen();
+    } catch {
+        fullscreenError.textContent = "Full screen is unavailable.";
+        fullscreenError.hidden = false;
+        gameRoot.querySelector(".game-dialog")?.focus({ preventScroll: true });
+    }
+});
+document.addEventListener("fullscreenchange", syncFullscreen);
 
 function card(game) {
     const link = document.createElement("a");
@@ -41,9 +63,15 @@ function card(game) {
 
 async function route() {
     const current = ++revision;
+    if (document.fullscreenElement === stage) {
+        await document.exitFullscreen().catch(() => {});
+        if (current !== revision) return;
+    }
     if (host) host.dispose();
     host = null;
     gameRoot.replaceChildren();
+    fullscreen.hidden = true;
+    fullscreenError.hidden = true;
     error.hidden = true;
     const game = games.find(({ id }) => "#" + id === location.hash);
     catalog.hidden = Boolean(game);
@@ -57,6 +85,12 @@ async function route() {
         if (current !== revision) return;
         host = createHost(gameRoot, () => { location.hash = ""; });
         launch(host);
+        const boards = [...gameRoot.querySelectorAll("canvas")];
+        const totalHeight = boards.reduce((height, board) => height + board.height, 0);
+        for (const board of boards) {
+            board.style.setProperty("--fullscreen-width-factor", board.width / totalHeight);
+        }
+        fullscreen.hidden = !document.fullscreenEnabled || !stage.requestFullscreen;
     } catch (cause) {
         if (current !== revision) return;
         if (host) host.dispose();
