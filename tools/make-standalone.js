@@ -25,6 +25,7 @@ const ALL_GAMES = [
     "Xonix.jsx",
     "Bomberman.jsx",
     "BattleCity.jsx",
+    "Sokoban.jsx",
     "Play Arcade.jsx"
 ];
 
@@ -72,7 +73,7 @@ function buildStandalone(file) {
         ""
     ].join("\n");
 
-    const result = header + body + "\n";
+    const result = header + body.replace(/\n+$/, "") + "\n";
     // Illustrator decodes a BOM-less .jsx as Windows-1252, so any non-ASCII text
     // (the i18n strings) needs the BOM or the UI turns to mojibake.
     const needsBom = Buffer.from(result, "utf8").some((b) => b > 127);

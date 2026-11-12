@@ -1079,6 +1079,7 @@ function animResetDrawClock() {
         sparks = [];
         grid = [];
         falling = [];
+        animFrom = [];
 
         for (var r = 0; r < ROWS; r++) {
             var rowArr = [];
@@ -1107,6 +1108,7 @@ function animResetDrawClock() {
             }
             grid.push(rowArr);
             falling.push(fallRow);
+            animFrom.push([]);
         }
 
         setStatus("statusReady", [caveIndex + 1, gemsNeeded]);

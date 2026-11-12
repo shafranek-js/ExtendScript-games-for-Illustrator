@@ -1,6 +1,6 @@
 # ExtendScript Games for Adobe Illustrator
 
-Eleven complete games that run **inside Adobe Illustrator** — pure ExtendScript (ES3) + ScriptUI, drawn pixel by pixel with `ScriptUIGraphics`, no raster assets, no plugins.
+Twelve complete games that run **inside Adobe Illustrator** — pure ExtendScript (ES3) + ScriptUI, drawn pixel by pixel with `ScriptUIGraphics`, no raster assets, no plugins.
 
 The games are the visible part. The real subject of this repository is **what the Illustrator scripting engine can actually do**: no timers, no fonts you can trust, no JSON, no frameworks — and still a real-time loop, a vector font renderer, a four-language UI and one-click export of the game scene to an editable artboard.
 
@@ -40,16 +40,17 @@ Every screenshot below is the real ScriptUI window, drawn by the game itself —
 | <img src="screenshots/xonix.png" width="150" alt="Xonix"> | **Xonix**<br>`Xonix.jsx` | Arcade | 52×34 flood-fill territory capture, sea orbs & land patrols, continuous 2px shoreline bevels, particle bursts |
 | <img src="screenshots/bomberman.png" width="150" alt="Bomberman"> | **Bomberman**<br>`Bomberman.jsx` | Action | 15×13 maze, corner-assist steering, chain-reaction bombs, 4 power-ups, hidden portal & phantom AI |
 | <img src="screenshots/battle-city.png" width="150" alt="Battle City"> | **Battle City**<br>`BattleCity.jsx` | Action | 26×26 mini-tile arena, Eagle HQ fortress, brick/steel/water/ice/trees, 4 enemy tank types, 6 bonuses, 8 maps |
+| *Pending capture* | **Sokoban**<br>`Sokoban.jsx` | Logic | 20 solver-verified crate puzzles, unlimited in-play Undo, BFS click-to-move, per-stage best moves/pushes saved |
 
 ## Quick start
 
-The launcher is the entry point: one window with all eleven games, hotkeys `1`–`9`, `0`, `A`, a random pick, and shortcuts to the docs, the game folder and the runtime logs.
+The launcher is the entry point: one window with all twelve games, hotkeys `1`–`9`, `0`, `A`, `B`, a random pick, and shortcuts to the docs, the game folder and the runtime logs.
 
 <img src="screenshots/launcher-arcade-11.png" width="420" alt="RELAX launcher with eleven games">
 
 1. Download or clone this repository (**keep the folder intact — the games share `lib/`**).
 2. In Illustrator open `File > Scripts > Other Script…` and pick **`Play Arcade.jsx`**.
-3. Click a game title or press `1`–`9`, `0`, `A`. Closing a game brings the launcher back.
+3. Click a game title or press `1`–`9`, `0`, `A` or `B`. Closing a game brings the launcher back.
 
 Running a single game directly works too: `File > Scripts > Other Script…` → e.g. `Tetris.jsx`, `Xonix.jsx`, `Bomberman.jsx` or `BattleCity.jsx`.
 
@@ -57,20 +58,33 @@ Running a single game directly works too: `File > Scripts > Other Script…` →
 
 **Controls:** arrows / WASD to move, `Space` for the primary action (`Z` / `X` to dig left / right in Lode Runner, bomb in Bomberman, fire in Battle City), `Esc` to close. Mouse steers in Arkanoid and Space Invaders; swipes and clicks work in 2048, Snake, Boulder Dash and Tetris.
 
+## Play in a browser
+
+The web launcher includes the same twelve games. The build reuses their rules, levels and vector drawing code. Canvas 2D draws the boards, browser input drives the controls, and progress is stored locally per browser and site address.
+
+```powershell
+node web/build.mjs
+python -m http.server 8765 --bind 127.0.0.1 --directory web/dist
+```
+
+Open [Relax Arcade locally](http://127.0.0.1:8765/). Use a keyboard for games with keyboard controls. Illustrator artboard export is available in the Illustrator edition.
+
+For online play, publish the contents of `web/dist/` to a static host. Rebuild after changing a game or the Illustrator launcher catalog.
+
 ## How it works
 
 The full engineering notes — including the platform traps that shaped this code — are in **[EXTENDSCRIPT_GAME_DEV_GUIDE.md](EXTENDSCRIPT_GAME_DEV_GUIDE.md)**. Short version:
 
-- **No timer in Illustrator.** A PowerShell process posts synthetic events into the modal dialog; the game reacts to them. It keeps running while Illustrator is in the background, pauses when the window is minimised, and never moves the real cursor unless the game window has focus.
-- **No trustworthy text rendering.** Everything on the canvas is geometry; ScriptUI `statictext` is used only for labels outside the canvas.
+- **Windows heartbeat.** A PowerShell helper posts synthetic input to wake the modal dialog. The helper keeps posting while the game window exists, including after focus loss. Check actual background and minimized behavior on the target Illustrator build. The helper moves the real cursor only when the game window has focus and the cursor is inside the playfield.
+- **Vector HUD.** Geometric glyphs give the game canvas consistent text placement. Standard ScriptUI labels use `statictext`.
 - **ES3 only** — `var`, loops, no `let`/`const`, no `JSON`, no `Array#forEach`. A static gate enforces this.
-- **Encoding matters.** Entry scripts are UTF-8 **with BOM**; included `lib/` files are ASCII and BOM-less.
+- **Encoding matters.** Entry scripts containing non-ASCII text are UTF-8 **with BOM**; included `lib/` files are ASCII and BOM-less.
 
 ## Repository layout
 
 ```
-Play Arcade.jsx             launcher: menu for all 11 games (1-9, 0, A, Random, Docs, Logs)
-2048.jsx … BattleCity.jsx  eleven modular games (require lib/)
+Play Arcade.jsx             launcher: menu for all 12 games (1-9, 0, A, B, Random, Docs, Logs)
+2048.jsx … Sokoban.jsx     twelve modular games (require lib/)
 standalone/                self-contained single-file builds (*_standalone.jsx, zero dependencies)
 lib/                       shared engine: drawing core, heartbeat, animation, persistence, i18n, diagnostics
 tools/                 static gate, core tests, headless logic/render tests, level importer, standalone builder
@@ -92,17 +106,18 @@ node tools/loderunner-headless.js # 37 headless tests for Lode Runner mechanics 
 node tools/xonix-headless.js      # 12 headless tests for Xonix flood-fill, patrols & vector rendering
 node tools/bomberman-headless.js  # 12 headless tests for Bomberman blasts, powerups, foes & portal
 node tools/battlecity-headless.js # 11 headless tests for Battle City terrain, HQ, upgrades & tanks
+node tools/sokoban-headless.js    # Sokoban solver, gameplay, rendering and dialog lifecycle checks
 node tools/make-standalone.js --all # rebuild all standalone single-file bundles in standalone/
 ```
 
-Both run on Node alone — Illustrator is not required. The runtime test is manual: see [TESTING.md](TESTING.md) (Smoke run ≈ 25 min, Full run ≈ 2.5 h).
+The commands above run on Node alone. For checks in Illustrator, see [TESTING.md](TESTING.md) (Smoke run ≈ 25 min, Full run ≈ 2.5 h).
 
 ## Requirements and known limitations
 
 - **Adobe Illustrator 2021+** — developed and tested on Illustrator 2026 (Windows, ES3 engine).
 - **Windows** for autonomous animation. On macOS the heartbeat is unavailable: the game still runs, but advances only while the mouse moves, and the status bar says so.
-- Corporate machines may block `powershell.exe -ExecutionPolicy Bypass` or `wscript.exe`; the game then reports that the timer is unavailable instead of silently freezing.
-- The games are modal dialogs by design — that is the only reliable way to keep an ExtendScript window alive.
+- Corporate machines may block `powershell.exe -ExecutionPolicy Bypass` or `wscript.exe`; a synchronous launch failure can be reported in the dialog. Confirm autonomous motion after launch to catch failures later in the helper chain.
+- The games use modal dialogs to keep their scripts active while the windows are open.
 - Released under the MIT licence: free to reuse, modify and redistribute with attribution.
 
 ## Documentation

@@ -2,7 +2,7 @@
 
 This document explains how to verify the games after the refactoring (extraction into `lib/`, unified heartbeat, lazy saving, launcher) and what constitutes acceptance.
 
-- **In scope:** 7 games (`2048`, `Tetris`, `Arkanoid`, `Snake`, `SpaceInvaders`, `BoulderDash`, `PacMan`), `Play Arcade.jsx`, `lib/*.jsx`, documentation.
+- **Original refactor coverage:** 7 games (`2048`, `Tetris`, `Arkanoid`, `Snake`, `SpaceInvaders`, `BoulderDash`, `PacMan`), `Play Arcade.jsx`, `lib/*.jsx`, documentation. Apply the general smoke checks to new games and use the [Sokoban checks](#s-sokoban) for its game-specific coverage.
 - **Out of scope:** gameplay balance, art quality, macOS support beyond "does not crash and reports an error", other OSes, networks/licenses.
 - **Key release risk:** the heartbeat contract change (real coordinates instead of constants) and game-field detection via the child window. Therefore Arkanoid and Space Invaders are tested first and more thoroughly than the rest.
 
@@ -22,14 +22,14 @@ This document explains how to verify the games after the refactoring (extraction
 | **G. Export** | `❖ To Artboard` | manual |
 | **H. Performance** | disk write frequency, CPU, responsiveness | manual + PowerShell |
 | **I. Resilience** | missing `lib/`, killed timer, corrupt save, foreign window | manual |
-| **J. Regression** | comparison with `_baseline_20261107/` | manual |
+| **J. Regression** | comparison with existing reference captures | manual |
 | **K. Cleanup** | processes, temp files | PowerShell |
 
 ## 2. Runs
 
 | Run | Scope | Time |
 |---|---|---|
-| **Smoke** | A, A2, B-01…B-04, C for all 7, K | ~25 min |
+| **Smoke** | A, A2, B-01…B-04, C for each game under test, K | ~25 min |
 | **Full** | everything below | ~2.5 h |
 | **Pre-release regression** | Smoke + D (Arkanoid/SpaceInvaders), F-05, J |
 
@@ -47,7 +47,7 @@ This document explains how to verify the games after the refactoring (extraction
 **Test data states**
 
 1. **Clean** — no saves: delete `AI_*_SaveData.txt` in `Folder.userData`.
-2. **Legacy** — save created by an older version: launch the games from `_baseline_20261107/` (local snapshot, not in the repository), play, and close.
+2. **Legacy** — save created by an older version: use an existing legacy save fixture and test on a copy. Record missing fixtures as blocked checks. Follow [AGENTS.md](AGENTS.md) for handling `_baseline_20261107/`.
 3. **Corrupt** — save with truncated contents (only `lang=`).
 4. **No-lib** — temporarily rename `lib` to `lib_off`.
 5. **Foreign window** — Notepad open with `SNAKE - Adobe Illustrator Edition.txt` (window lookup test).
@@ -87,8 +87,8 @@ Priorities: **P0** — blocks acceptance, **P1** — required, **P2** — if pos
 
 | ID | Steps | Expected | P |
 |---|---|---|---|
-| A-01 | `node tools/check.js` | `checked: 8 scripts, 4 lib files (7 scripts use #include)` and `OK`, no WARN | P0 |
-| A-02 | `node tools/test-core.js` | `16/16 passed` | P0 |
+| A-01 | `node tools/check.js` | `OK` with no warnings | P0 |
+| A-02 | `node tools/test-core.js` | all core tests pass | P0 |
 | A-03 | Append `var x = 1; x.forEach(...)` to the end of any game; run `check.js`; revert the change | `ERROR … ES5+ construct: Array#forEach`, exit code 1 | P1 |
 
 ### B. Launch
@@ -110,7 +110,7 @@ Priorities: **P0** — blocks acceptance, **P1** — required, **P2** — if pos
 |---|---|---|---|
 | C-01 | Launch the game | The window opens, the field and HUD are rendered, status is "ready", and there are no exceptions | P0 |
 | C-02 | Look closely at the canvas | No clipped or misaligned digits or labels; no empty `□` placeholders | P0 |
-| C-03 | Compare the window size with the run from `_baseline_20261107/` | It matches (game geometry has not changed) | P1 |
+| C-03 | Compare the window size with an existing reference capture | It matches (game geometry has not changed) | P1 |
 | C-04 | Close with the X button, then launch again and close with the `Close` button | Both methods work and the window does not get stuck | P0 |
 
 ### D. Controls
@@ -124,9 +124,9 @@ Priorities: **P0** — blocks acceptance, **P1** — required, **P2** — if pos
 | D-05 | Space Invaders: move the mouse over the field | The cannon follows; it does not jerk when controlled by keyboard | P0 |
 | D-06 | Space Invaders: move the cursor onto a button/outside the field | The cannon does not jump; buttons click normally | P1 |
 | D-07 | Alt-Tab to another application for 5 s, then return | The game **keeps running** in the background (objects move); the cursor in the other window does not jitter; no time "jump" on return | P1 |
-| D-07b | Minimize Illustrator for 10 s, then restore it | The timer keeps pulsing (no visibility gate in `Tick`), the game has moved on; background CPU usage is expected | P1 |
+| D-07b | With an autonomous game running, minimize Illustrator for 10 s and restore it | Record the Illustrator build, game, frame-log gap and whether the game advanced. After restore, autonomous motion resumes without input and controls respond. | P1 |
 | D-08 | Launch a game that passes `highRes: true`, then a default one | `AI_<Token>_Heartbeat.ps1` for the first contains `timeBeginPeriod(1)`, the pulse loop inside `try`, and `timeEndPeriod(1)` in `finally`; the second contains no `::timeBeginPeriod(1)`. After closing both, no `powershell.exe` and no `AI_*_Launcher.vbs` remain | P2 |
-| D-08 | Click the buttons while the cursor is over the field | All buttons respond (the cursor is not captured by the timer) | P1 |
+| D-08b | Click the buttons while the cursor is over the field | All buttons respond (the cursor is not captured by the timer) | P1 |
 | D-09 | 2048/Snake/Boulder/Tetris: swipe or click on the field | The gesture works (according to the rules of the specific game) | P1 |
 
 ### E. Localization and Encoding (7 games × 4 languages)
@@ -147,7 +147,7 @@ Priorities: **P0** — blocks acceptance, **P1** — required, **P2** — if pos
 | F-02 | Change the language and theme, close, and reopen | They are restored | P0 |
 | F-03 | Tetris: play for 30 s, place a piece, close, and reopen | The field, score, lines, level, and current piece are restored; status is "Game restored" | P0 |
 | F-04 | Tetris: play until Game Over, close, and reopen | A new game starts (the session is not restored), and the high score is preserved | P1 |
-| F-05 | **Compatibility:** launch `_baseline_20261107/Tetris.jsx`, play, and close; then launch the new version | The new version reads the old save without errors (file names and keys are unchanged) | P0 |
+| F-05 | **Compatibility:** install a copy of an existing legacy Tetris save in the test profile, then launch the current version | The new version reads the old save without errors (file names and keys are unchanged) | P0 |
 | F-06 | Same for 2048 | The old save is read and the field is restored | P0 |
 | F-07 | Truncate the save to `lang=cs`, then launch | The game starts from a clean slate, without an exception | P1 |
 | F-08 | Make the save read-only, then play | The game does not crash; changes are not saved | P2 |
@@ -189,9 +189,18 @@ $f = "<Folder.userData>\AI_Tetris_SaveData.txt"
 
 | ID | Steps | Expected | P |
 |---|---|---|---|
-| J-01 | Launch the 7 games from `_baseline_20261107/` and the 7 new games one by one | All 14 launch; the new windows do not differ in size | P0 |
+| J-01 | Launch each of the 7 original games from the current checkout and compare window dimensions with existing reference captures | The current games launch and match the reference dimensions. Record any missing references. | P0 |
 | J-02 | Compare HUD/field screenshots (content is random — compare geometry and colors) | Layout and palette match | P1 |
 | J-03 | Compare status lines and hints | Texts are unchanged (except the new `statusNoHeartbeat`, which should not appear on Windows) | P1 |
+
+### S. Sokoban
+
+Run `node tools/sokoban-headless.js`. The suite checks all 20 maps, `par`, movement, Undo, completion in arbitrary order, independent records, write failures and the mocked dialog lifecycle for both script variants.
+
+| ID | Steps | Expected | P |
+|---|---|---|---|
+| S-01 | With heartbeat active, click a distant reachable floor tile and click Undo before the walk ends. Wait for the remaining route time. | Undo reverses one step. The player and counters stay at the resulting values until the next input. | P1 |
+| S-02 | Use an isolated test save that can be read but cannot be written. Complete a stage and click the field to advance. Repeat with the last unsolved stage to exercise the campaign completion screen. | The click opens the next stage or returns to stage 1 after campaign completion. The localized save warning remains visible on the new stage. Restore the test file's original write access after the check. | P1 |
 
 ### K. Cleanup
 
@@ -213,7 +222,7 @@ Get-ChildItem $env:TEMP -Filter "relax_run_*" | Select Name, LastWriteTime
 
 ## 6. Entry and Exit Criteria
 
-**Entry:** `check.js` → `OK`; `test-core.js` → `16/16`; `_baseline_20261107/` is present; Illustrator 2026 launches.
+**Entry:** `check.js` → `OK`; `test-core.js` → all tests pass; Illustrator 2026 launches.
 
 **Exit (acceptance):**
 1. All P0 checks have passed.
@@ -251,7 +260,7 @@ The frame log is written automatically; the `set / hs / draw` columns show at wh
 
 ```
 [ ] A-01 check.js OK
-[ ] A-02 test-core 16/16
+[ ] A-02 test-core passes
 [ ] B-01…B-04 launcher and launch without lib
 [ ] C-01…C-04 all 7 games open/close
 [ ] D-01…D-09 controls; Arkanoid and Space Invaders — mouse with no jitter
@@ -263,4 +272,5 @@ The frame log is written automatically; the `set / hs / draw` columns show at wh
 [ ] I-01…I-02 killed timer and foreign window
 [ ] J-01/J-03 regression against baseline
 [ ] K-01…K-03 no stuck processes or temp garbage
+[ ] Sokoban headless suite and S-01/S-02
 ```

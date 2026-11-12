@@ -8,6 +8,8 @@ This practical guide distills engineering and game-design experience from creati
 - **Space Invaders** (`SpaceInvaders.jsx`) — a 5×9 alien formation with two-frame animation, destructible bunkers, and a UFO
 - **Boulder Dash** (`BoulderDash.jsx`) — grid-based gravity for boulders and diamonds, underground-monster AI, and 5 caves
 - **Pac-Man** (`PacMan.jsx`) — a 19×21 maze, 4 ghosts with distinct personalities, and a "frightened" mode
+- **Lode Runner**, **Xonix**, **Bomberman** and **Battle City** add digging, territory capture, chain reactions and destructible terrain.
+- **Sokoban** combines solver-verified puzzles, click-to-walk, Undo and independent move and push records.
 
 The document is written for a developer who wants to build their own interactive games or complex graphics applications inside Illustrator without running into the platform's specific pitfalls.
 
@@ -21,20 +23,23 @@ lib/
   GameHeartbeat.jsx   # autonomous Win32Heartbeat loop (Windows)
   GamePersist.jsx     # key=value in Folder.userData
   GameI18n.jsx        # {0} substitution
+  GameAnim.jsx        # grid movement interpolation
   GamePerf.jsx        # frame log in %TEMP%\relax_log_<Game>.txt
 tools/
   check.js            # static check: #include, syntax, ES3 gate, encoding, i18n
   test-core.js        # run lib/ in a sandbox (geometry, i18n, heartbeat)
+  make-standalone.js  # generate single-file bundles
   migrate.js          # mechanical edits (remove functions, insert #include)
-Play Arcade.jsx       # launcher: menu of all games, hotkeys 1-7, Random, Docs, Logs, Folder
-2048.jsx … Tetris.jsx # the games themselves
+Play Arcade.jsx       # launcher: menu of all games, hotkeys 1-9, 0, A, B, Random, Docs, Logs, Folder
+2048.jsx … Sokoban.jsx # the games themselves
+standalone/           # generated single-file scripts
 EXTENDSCRIPT_GAME_DEV_GUIDE.md
 README.md
 TESTING.md
 AGENTS.md
 ```
 
-Every game starts the same way:
+A game entry script follows this pattern. Include the modules it uses.
 
 ```javascript
 #target illustrator
@@ -66,20 +71,26 @@ Check: `node tools/check.js` and `node tools/test-core.js` (see §8).
 
 ---
 
+### 0.2. Checklist for Adding a Game
+
+1. Choose the update model. A turn-based game can update on input. For autonomous motion, use elapsed time for the simulation and heartbeat for Windows wake-ups.
+2. Create an ES3 entry script with its own IIFE. Reuse shared drawing, localization, persistence and timing helpers as needed. Keep the game's rules, palette and glyphs in the entry script.
+3. Add the game to `Play Arcade.jsx` and `tools/make-standalone.js`. Document its controls. Regenerate both bundles with `node tools/make-standalone.js "<Game>.jsx"` and `node tools/make-standalone.js "Play Arcade.jsx"`.
+4. Run `node tools/check.js`, `node tools/test-core.js` and any game-specific headless tests. Include coverage of `onShow` and `onClose` if the gameplay tests return before creating the dialog.
+5. In Illustrator, smoke-test the direct script, launcher and standalone entry points. Check input, themes, languages, both close paths, relaunch and export in a scratch document. For heartbeat games, check motion without input and helper cleanup. See [TESTING.md](TESTING.md).
+
 ## 1. Environment Features and Limitations of Illustrator ExtendScript
 
-Before designing a game architecture, you need to account for 4 fundamental limitations of the Illustrator engine:
+The game loop and window lifecycle depend on four properties of this setup.
 
 1. **The language standard is ECMAScript 3 (ES3, 1999)**:
    - **Not available**: `let`, `const`, arrow functions `() => {}`, template strings, `JSON.parse`/`JSON.stringify`, `Array.prototype.forEach`, `map`, `filter`, `indexOf`, `String.prototype.trim`.
    - **Use**: `var`, classic `for` loops, custom helpers, and an IIFE wrapper `(function () { ... })();` so you do not pollute Illustrator's global namespace.
    - `String.prototype.indexOf` and `Array.prototype.indexOf` are different things: the former is standard, the latter is absent.
 2. **No `setInterval`, `setTimeout`, or `requestAnimationFrame`**:
-   - After Effects has `app.scheduleTask()`, InDesign has `idleTasks`, but **Adobe Illustrator has no native timer at all**.
-3. **Only modal windows `new Window("dialog", ...)`**:
-   - Non-modal windows (`palette`) lose their execution context immediately after the script finishes. Therefore a game must run inside a modal `dialog`.
-4. **Blocking Win32 message loop**:
-   - While a `dialog` is open, the ExtendScript thread sleeps inside a system call waiting for OS events and wakes **only when** a mouse or keyboard event arrives at the window.
+   - The Illustrator ExtendScript setup used here has no native interval API for scheduling these game updates.
+3. **Modal window lifecycle.** These games use `new Window("dialog", ...)` to keep the script active while the window is open. Test the lifecycle in the target Illustrator build.
+4. **Event-driven updates.** ScriptUI dispatches input and draw events while the dialog is open. Real-time games need a way to wake their update handlers when the player provides no input.
 
 ---
 
@@ -91,11 +102,11 @@ In turn-based games (*2048*), a redraw is needed only when the player makes a mo
 ### The Solution (implemented in `lib/GameHeartbeat.jsx`)
 When the window opens (`win.onShow`), the script generates a micro PowerShell script in the `Folder.temp` folder with an embedded C# class `Win32Heartbeat` (compiled in memory via `Add-Type`) and launches it hidden through `WScript.Shell` (`wscript.exe` with window flag `0` — without a single console flash).
 
-Every `25–40 ms` the background process checks whether the game window still exists and sends it a "pulse" of events that wakes the Illustrator JS engine. When the player closes the window (`win.onClose`), the loop terminates instantly.
+The helper finds the dialog and posts synthetic input at the requested interval. `heartbeatStart(cfg)` reports whether the launcher was dispatched. Confirm actual event delivery after a fresh launch by watching an autonomous game advance without input. Closing the window signals the helper to exit on a subsequent loop check.
 
-**Background behavior.** The game continues even if Illustrator is minimized behind another window: it must not stop on focus loss, otherwise a player who switches to another program for a minute returns to a "frozen" game.
+**Background behavior.** The helper loop has no visibility gate. Test focus loss and minimization separately and record actual game progress in the target Illustrator build.
 
-At the same time, the tiny cursor shift (`mouse_event`) is performed **only when the game window is focused**: otherwise the pulse would jostle the pointer while you work in another application. Engine wake-up (`WM_MOUSEMOVE` + `F15`) always happens.
+At the same time, the tiny cursor shift (`mouse_event`) is performed **only when the game window is focused**: otherwise the pulse would jostle the pointer while you work in another application. The helper continues posting `WM_MOUSEMOVE` and `F15` after focus loss.
 
 Do not add an `IsWindowVisible(hwnd)` guard to `Tick`. It looks like a sensible "pause while minimized" feature, but it silently kills the timer on some ScriptUI windows and the game freezes with no error anywhere — the failures then look like a zombie process with no events.
 
@@ -129,19 +140,19 @@ Module API: `heartbeatSupported()`, `heartbeatStart(cfg)`, `heartbeatStop()`, `h
 | Tetris | 40 | clock-based gravity (800→120 ms) | the tick affects only smoothness |
 | Snake / PacMan / SpaceInvaders / BoulderDash | 35 | its own interval (60 / 60 / 32 / 155 ms) | the tick is the "wake-up rate" |
 
-**Important:** the logic step is fixed (an object moves a fixed number of pixels/cells per step), so the actual speed depends on the event rate. If you need independence from CPU load, accumulate `dt` and do `while (acc >= 16.7 && steps < 3) { step(); acc -= 16.7; }`.
+For a fixed-step simulation, accumulate elapsed milliseconds and cap the number of updates per wake-up to keep the dialog responsive. For example, after accumulating elapsed time in `acc`, run `for (var steps = 0; acc >= 16.7 && steps < 3; steps++) { step(); acc -= 16.7; }`.
 
-### Timer Resolution: Why `tickMs: 16` Really Sleeps ~31 ms
+### Timer Resolution and Measured Cadence
 
-`Start-Sleep -Milliseconds` rounds the request up to the system timer, which is 15.6 ms by default. Measured on this machine: `tickMs: 16` and `tickMs: 25` both give a **~31 ms** period, `tickMs: 35` gives ~47 ms. Asking for a smaller number changes nothing.
+In one Windows test, `tickMs: 16` and `tickMs: 25` both produced a period of about 31 ms, and `tickMs: 35` produced about 47 ms. Use the frame log to measure cadence on the target system.
 
-Raising the resolution to 1 ms makes the request real:
+Pass `highRes: true` to request 1 ms timer resolution.
 
 ```js
 heartbeatStart({ token: "Platformer", title: WIN_TITLE, tickMs: 16, highRes: true });
 ```
 
-`highRes` is **off by default and must stay that way** for the shipped games: their logic step is fixed (see the warning above), so a faster pulse silently changes their speed. Opt in only when the game's step is driven by elapsed time — an accumulated `dt` (like the platformer) or a `now - lastStep >= N` gate. The generated script raises the resolution with `timeBeginPeriod(1)` and always restores it in a `finally` block; if the process is killed, Windows reverts the resolution when the process exits.
+`highRes` defaults to off. Sokoban, Xonix and Battle City opt in. Use elapsed-time updates or an elapsed-time gate before opting in so faster wake-ups do not speed up the rules. The helper pairs `timeBeginPeriod(1)` with `timeEndPeriod(1)` in `finally`. Timer resolution and event delivery both affect the measured frame interval. [Microsoft documentation for timeBeginPeriod](https://learn.microsoft.com/en-us/windows/win32/api/timeapi/nf-timeapi-timebeginperiod)
 
 ### Synthetic Mouse Event Contract
 The pulse contains three signals:
@@ -167,11 +178,11 @@ The correct approach is `IntPtr lpClassName` and `IntPtr.Zero` inside `FindGameW
 An exact title match is tried first. If none is found (the window has not been created yet), visible windows are enumerated and the one whose title **begins with** the required string is taken. Substring search (`"TETRIS"`, `"SNAKE"`) was removed intentionally: it could latch onto a browser tab or onto Illustrator itself if the document was saved as `Tetris.ai` (and the export layer is named `Tetris_Vector_Board`).
 
 ### Temporary Files and Cleanup
-Three files are created per game in `Folder.temp`: `AI_<Token>_Heartbeat.ps1`, `AI_<Token>_Launcher.vbs`, `AI_<Token>_Stop.flag`. `heartbeatStop()` writes the flag and deletes `.ps1`/`.vbs` (if PowerShell is still reading the file, deletion fails silently; the next launch overwrites it). The PowerShell process exits by itself based on `IsWindow(hwnd)` and the flag, so no "hanging" processes remain.
+Three files are created per game in `Folder.temp`: `AI_<Token>_Heartbeat.ps1`, `AI_<Token>_Launcher.vbs`, `AI_<Token>_Stop.flag`. `heartbeatStop()` writes the flag and deletes `.ps1`/`.vbs` (if PowerShell is still reading the file, deletion fails silently; the next launch overwrites it). The PowerShell process exits by itself based on `IsWindow(hwnd)` and the flag, so verify that the process and helpers are gone after closing.
 
 ### Platform Limitations
-- **Windows-only.** On macOS `heartbeatStart()` returns `false` and the game shows `statusNoHeartbeat`: animation is possible only while the user moves the mouse. Silent "freezing" is no longer possible.
-- **Corporate policies.** The chain `wscript.exe` → `powershell -ExecutionPolicy Bypass` → `Add-Type` + `PostMessage`/`mouse_event` is exactly the profile EDR/antivirus flags. If PowerShell or VBScript is blocked by Group Policy, `heartbeatStart()` returns `false` (the game reports this) but does not "break".
+- **Windows-only.** On macOS `heartbeatStart()` returns `false`. Show `statusNoHeartbeat` and keep direct input usable.
+- **Corporate policies.** VBS, PowerShell or `Add-Type` can be blocked. Synchronous launch failures can be reported via `heartbeatLastError()`. Failures after VBS dispatch may leave the game without autonomous updates even when `heartbeatStart()` returns `true`.
 - **Start delay.** `Add-Type` compiles C# on every launch (~1–2 s); that is why the process is launched asynchronously and does not block window opening.
 
 ---
@@ -185,7 +196,7 @@ In the Windows implementation of `ScriptUIGraphics` in Adobe Illustrator, there 
 - As the font size grows, digits shift far downward and press against the bottom edge of the tile or spill beyond it.
 - The offset depends nonlinearly on the string length and the configured system DPI scaling.
 
-**Solution**: a complete ban on `g.drawString()` inside the game canvas — **all 7 games have zero `drawString` calls**. Instead, a custom geometric character renderer is used, built on two primitives from `lib/GameCore.jsx`:
+Use geometric glyphs where the canvas needs precise text placement. Standard ScriptUI labels can use `statictext`. The glyph renderer uses two primitives from `lib/GameCore.jsx`.
 1. **`fillCapsule(g, x1, y1, x2, y2, r, brush)`** — a segment of arbitrary slope with rounded ends of radius `r`.
 2. **`fillArcBand(g, cx, cy, rMid, rThick, startDeg, endDeg, brush)`** — a smooth arc of the given thickness with rounded ends.
 
@@ -215,7 +226,7 @@ If a character is missing from the glyph table, it is **silently not drawn** —
 
 The canonical smoothing parameters (do not change them for individual games): `fillCapsule` — `steps = 5`, `fillArcBand` — `arcSteps = 10`, `capSteps = 4`.
 
-### 3.5. Smooth Rendering in Grid-Based Games (`lib/GameAnim.jsx`)
+### 3.4. Smooth Rendering in Grid-Based Games (`lib/GameAnim.jsx`)
 
 Logic in Pac-Man, Snake, and Boulder Dash steps 6–7 times per second, while tetrominoes in Tetris step once every 800 ms. If you draw only at the step moment, objects "jump" by a cell — this reads as lag, even though the CPU is idle (measurement: a frame takes 0.3–3.4 ms, fps = logic step rate).
 
@@ -232,9 +243,9 @@ if (animDue(33)) refreshUI();     // draw pulse ~30 fps between steps
 
 The second half of the technique is **batching**: at 30 fps you cannot draw cell by cell. `fillBatchRects` / `fillBatchCircles` from `lib/GameCore.jsx` collect N shapes into a single path and issue a single `fillPath`: the Pac-Man maze went from ~340 fills to 4; Boulder Dash cells went from ~1200 to 13.
 
-### 3.4. Reliable Screen Redraw (`refreshUI`)
+### 3.5. Reliable Screen Redraw (`refreshUI`)
 
-In some Illustrator builds, calling `gameCanvas.notify("onDraw")` by itself does not invalidate the window area. Always use the combination:
+In some Illustrator builds, calling `gameCanvas.notify("onDraw")` by itself does not invalidate the window area. The games use this combination when a canvas needs explicit invalidation.
 
 ```javascript
 function refreshUI() {
@@ -261,7 +272,7 @@ Standard ScriptUI buttons and text fields on Windows are rendered through classi
   - Icons and accents: `❖`, `◐`, `☀`, `★`, `◈`, `✓`
 
 ### 4.2. Preventing Text Clipping (`StaticText` Clipping)
-The `statictext` control never wraps text to a new line and clips anything that does not fit into `preferredSize[0]`.
+A default `statictext` is single-line and can clip at its allocated width. For wrapping, create it with `{multiline: true}` and give it enough height. Check the longest localized text at the target DPI.
 - The sum of element widths inside a horizontal `row` group plus `(N - 1) * spacing` **must not exceed `CANVAS_W`**.
 - Keep hint texts (`controlsHint`) within `24–28` characters in all localizations.
 - Status lines (`statusReady`, `statusGameOver`) — no longer than ~50 characters: a 365 px wide footer at Segoe UI 9 pt fits approximately that much.
@@ -293,7 +304,7 @@ The custom `Group` area (`gameCanvas`) does not take keyboard focus on a mouse c
 ## 6. Localization (Including Hindi / Devanagari) and Data Persistence
 
 ### 6.1. Encoding and Dictionaries
-1. Always save `.jsx` as **UTF-8 with BOM**. ExtendScript displays both Czech/Romanian diacritics (`Čeština`, `Română`) and Devanagari (`हिन्दी`) in `statictext`, `button`, and `dropdownlist`; headings inside `ScriptUIGraphics` are best left in Latin (`SCORE`, `BEST`, `STAGE`).
+1. Save entry scripts with non-ASCII text as **UTF-8 with BOM**. ExtendScript displays both Czech/Romanian diacritics (`Čeština`, `Română`) and Devanagari (`हिन्दी`) in `statictext`, `button`, and `dropdownlist`; headings inside `ScriptUIGraphics` are best left in Latin (`SCORE`, `BEST`, `STAGE`).
 2. **Check the BOM.** Without it, Illustrator decodes the file as Windows-1252, and the interface shows `2048 â€¢ Adobe Illustrator Edition`, `ÄŒeÅ¡tina`, `RomÃ¢nÄƒ`, `à¤¹à¤¿à¤¨à¥à¤¦à¥€`. This is the most common "broken interface" in ExtendScript projects: the code still works, so the error is noticed only visually.
    - Entry point → BOM is mandatory when non-ASCII characters are present.
    - Included file (`lib/`) → BOM is forbidden, keep it ASCII-only.
@@ -301,7 +312,7 @@ The custom `Group` area (`gameCanvas`) does not take keyboard focus on a mouse c
 3. The `en / cs / ro / hi` dictionaries must have **the same set of keys** — otherwise `undefined` appears in the interface. This is checked automatically (`check.js`).
 4. Parameter substitution is `relaxTranslate(dict, fallbackDict, key, args)`, format `{0}`, `{1}`. The game keeps a one-line `tr(key, args)` wrapper.
 
-A new service key present in all six dynamic games: `statusNoHeartbeat` — reports that autonomous animation is unavailable.
+Games that use heartbeat define `statusNoHeartbeat` to report when autonomous animation is unavailable.
 
 ### 6.2. Persistence Without JSON
 Data lives in `Folder.userData` in files `AI_<Token>_SaveData.txt` in line-by-line `key=value` format. The code that handles them is isolated in `lib/GamePersist.jsx`:
@@ -356,10 +367,13 @@ The standout capability of a game inside Adobe Illustrator is turning the curren
 ```powershell
 node tools/check.js
 node tools/test-core.js
+node tools/sokoban-headless.js
 ```
 `check.js` verifies: that every `#include` resolves and that there are no cycles; compilation of the fully expanded script (`vm.Script`, with line numbers); forbidden ES5+ constructs (strings/comments are masked first so C# strings do not trigger false positives); **encoding** (BOM on the entry point, ASCII-only and BOM-less in `lib/`); identical i18n key sets across all languages; existence of keys passed to `tr()`/`setStatus()`; warnings about duplicate shared functions. The `--fix` flag adds a missing BOM and removes an extra one from `lib/` files.
 
 `test-core.js` executes `lib/` in a sandbox with a fake `ScriptUIGraphics` and checks geometry (coordinate finiteness, string centering, point counts), `{0}` substitution, `key=value` parsing, and that `heartbeatStart` generates valid C#/`.ps1` (including `IntPtr lpClassName` and prefix window search).
+
+The Sokoban suite exercises `onShow` and `onClose` with a mock window and filesystem for both the modular and standalone scripts. Check actual event delivery and artboard export during the manual smoke run.
 
 ### Frame Log During Play
 

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Relax Arcade</title>
+    <link rel="stylesheet" href="./style.css">
+    <script type="module" src="./app.js"></script>
+</head>
+<body>
+    <header class="bar"><a href="#" aria-label="Relax Arcade home">RELAX<span>ARCADE</span></a></header>
+    <main>
+        <section id="catalog">
+            <div class="intro">
+                <h1>Pick a game.</h1>
+                <button id="random" type="button">Random game <span aria-hidden="true">↗</span></button>
+            </div>
+            <div id="games" class="games"></div>
+        </section>
+        <section id="play" hidden>
+            <a class="back" href="#">← All games</a>
+            <h1 id="game-title" tabindex="-1"></h1>
+            <div id="game"></div>
+        </section>
+        <p id="error" role="alert" hidden></p>
+    </main>
+</body>
+</html>

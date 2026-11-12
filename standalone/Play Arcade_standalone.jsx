@@ -39,7 +39,8 @@
         { file: "LodeRunner.jsx", token: "LodeRunner", title: "Lode Runner", tag: "ARCADE", desc: "150 levels, digging, guards" },
         { file: "Xonix.jsx", token: "Xonix", title: "Xonix", tag: "ARCADE", desc: "Flood-fill territory capture" },
         { file: "Bomberman.jsx", token: "Bomberman", title: "Bomberman", tag: "ACTION", desc: "15x13 maze, bombs, powerups" },
-        { file: "BattleCity.jsx", token: "BattleCity", title: "Battle City", tag: "ACTION", desc: "26x26 tanks, Eagle HQ, 8 maps" }
+        { file: "BattleCity.jsx", token: "BattleCity", title: "Battle City", tag: "ACTION", desc: "26x26 tanks, Eagle HQ, 8 maps" },
+        { file: "Sokoban.jsx", token: "Sokoban", title: "Sokoban", tag: "LOGIC", desc: "20 crate puzzles, undo, click move" }
     ];
 
     // ---------------------------------------------------------------- paths
@@ -254,7 +255,7 @@
         var titleFont = makeFont(22, "BOLD");
         if (titleFont) title.graphics.font = titleFont;
 
-        var sub = win.add("statictext", undefined, "Eleven games inside Illustrator - click a title or press 1-9, 0, A");
+        var sub = win.add("statictext", undefined, "Twelve games inside Illustrator - click a title or press 1-9, 0, A, B");
         sub.graphics.foregroundColor = mutedPen;
         win.add("panel").preferredSize = [440, 1];
 
@@ -269,7 +270,7 @@
             row.alignChildren = ["left", "center"];
             row.spacing = 8;
 
-            var keyLabel = (i === 9) ? "0" : (i === 10 ? "A" : String(i + 1));
+            var keyLabel = (i === 9) ? "0" : (i === 10 ? "A" : (i === 11 ? "B" : String(i + 1)));
             var key = row.add("statictext", undefined, keyLabel);
             key.preferredSize = [14, 20];
             key.graphics.foregroundColor = exists ? accentPen : mutedPen;
@@ -384,6 +385,12 @@
         var onKey = function (ev) {
             var name = String(ev.keyName || "");
             var digit = parseInt(name, 10);
+            if (name.toUpperCase() === "B" && GAMES.length >= 12) {
+                ev.preventDefault();
+                chosen = 11;
+                win.close();
+                return;
+            }
             if (name.toUpperCase() === "A" && GAMES.length >= 11) {
                 ev.preventDefault();
                 chosen = 10;
