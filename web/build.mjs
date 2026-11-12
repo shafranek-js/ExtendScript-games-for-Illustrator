@@ -37,7 +37,7 @@ for (const [, file, token, title, genre, description] of entries) {
     await writeFile(join(dist, "games", id + ".js"),
         "export default function ({ " + bindings + " }) {\n" + libs.join("\n") + "\n" + body + "\n}\n");
     if (assets.has(image)) await cp(join(root, "screenshots", image), join(dist, "images", image));
-    games.push({ id, title, genre, description, image: assets.has(image) ? image : null });
+    games.push({ id, token, title, genre, description, image: assets.has(image) ? image : null });
 }
 
 for (const file of ["index.html", "app.js", "host.js", "style.css"]) {

@@ -246,6 +246,16 @@ export function createHost(root, returnToCatalog) {
     return {
         Window,
         dispose,
+        sendKey(keyName, isDown) {
+            if (!dialog || closed) return;
+            dialog.dispatch(isDown ? "keydown" : "keyup", {
+                keyName,
+                target: dialog,
+                currentTarget: dialog,
+                preventDefault: noop,
+                stopPropagation: noop
+            });
+        },
         heartbeatStart(config) {
             stopHeartbeat();
             timer = setInterval(() => {

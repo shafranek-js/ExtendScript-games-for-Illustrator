@@ -8,27 +8,78 @@
     <script type="module" src="./app.js"></script>
 </head>
 <body>
-    <header class="bar"><a href="#" aria-label="Relax Arcade home">RELAX<span>ARCADE</span></a></header>
+    <header class="bar">
+        <div class="bar-inner">
+            <a class="brand" href="#" aria-label="Relax Arcade home">
+                <span class="brand-mark" aria-hidden="true"></span>
+                <span class="brand-text">RELAX<span>ARCADE</span></span>
+            </a>
+            <div class="bar-links">
+                <span class="bar-tag">ExtendScript · Canvas 2D</span>
+                <a class="bar-repo" href="https://github.com/shafranek-js/ExtendScript-games-for-Illustrator" target="_blank" rel="noopener">Illustrator .jsx ↗</a>
+            </div>
+        </div>
+    </header>
     <main>
         <section id="catalog">
-            <div class="intro">
-                <h1>Pick a game.</h1>
-                <button id="random" type="button">Random game <span aria-hidden="true">↗</span></button>
+            <div class="hero">
+                <div class="hero-copy">
+                    <span class="eyebrow">12 Adobe Illustrator Games · Live in Browser</span>
+                    <h1>Pick a game, right on the artboard.</h1>
+                    <p class="lead">Every game runs its original ExtendScript ES3 logic live on HTML5 Canvas — no plugins, no emulators, local progress saved automatically.</p>
+                </div>
+                <div class="hero-actions">
+                    <button id="random" type="button">Random game <span aria-hidden="true">↗</span></button>
+                </div>
+            </div>
+            <div class="catalog-bar">
+                <div id="filters" class="filters" role="tablist" aria-label="Filter games by genre"></div>
+                <span class="save-note" id="save-note">Saved locally in browser</span>
             </div>
             <div id="games" class="games"></div>
         </section>
         <section id="play" hidden>
-            <a class="back" href="#">← All games</a>
-            <h1 id="game-title" tabindex="-1"></h1>
-            <div id="game-stage">
-                <div class="game-toolbar">
-                    <button id="fullscreen" class="game-button" type="button" hidden>Full screen</button>
-                    <p id="fullscreen-error" role="status" hidden></p>
+            <div class="play-bar">
+                <div class="play-left">
+                    <a class="back" href="#">← All games</a>
+                    <div class="play-heading">
+                        <h1 id="game-title" tabindex="-1"></h1>
+                        <span id="game-genre" class="genre-pill"></span>
+                    </div>
                 </div>
+                <div class="play-actions">
+                    <label class="sr-only" for="game-switch">Switch game</label>
+                    <select id="game-switch" class="ui-select"></select>
+                    <button id="controls-toggle" class="ui-btn" type="button" aria-expanded="false" aria-controls="controls-panel">Controls</button>
+                    <button id="fullscreen" class="ui-btn ui-btn-accent" type="button" hidden>Full screen</button>
+                </div>
+            </div>
+            <div id="controls-panel" class="controls-panel" hidden></div>
+            <div id="game-stage">
+                <p id="fullscreen-error" class="stage-error" role="status" hidden></p>
                 <div id="game"></div>
+                <div id="touch-pad" class="touch-pad" aria-label="Touch controls">
+                    <div class="dpad" role="group" aria-label="Directional pad">
+                        <button class="pad-btn pad-up" type="button" data-key="Up" aria-label="Up">▲</button>
+                        <button class="pad-btn pad-left" type="button" data-key="Left" aria-label="Left">◀</button>
+                        <button class="pad-btn pad-down" type="button" data-key="Down" aria-label="Down">▼</button>
+                        <button class="pad-btn pad-right" type="button" data-key="Right" aria-label="Right">▶</button>
+                    </div>
+                    <div class="pad-actions">
+                        <button class="pad-btn pad-action" type="button" data-key="Space">Action</button>
+                        <div class="pad-secondary">
+                            <button class="pad-btn pad-small" type="button" data-key="Z">Z / Undo</button>
+                            <button class="pad-btn pad-small" type="button" data-key="P">P / Pause</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
         <p id="error" role="alert" hidden></p>
     </main>
+    <footer class="foot">
+        <span>Built from pure Illustrator ExtendScript (.jsx)</span>
+        <a href="./LICENSE">MIT License</a>
+    </footer>
 </body>
 </html>

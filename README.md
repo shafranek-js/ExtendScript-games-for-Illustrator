@@ -40,7 +40,7 @@ Every screenshot below is the real ScriptUI window, drawn by the game itself —
 | <img src="screenshots/xonix.png" width="150" alt="Xonix"> | **Xonix**<br>`Xonix.jsx` | Arcade | 52×34 flood-fill territory capture, sea orbs & land patrols, continuous 2px shoreline bevels, particle bursts |
 | <img src="screenshots/bomberman.png" width="150" alt="Bomberman"> | **Bomberman**<br>`Bomberman.jsx` | Action | 15×13 maze, corner-assist steering, chain-reaction bombs, 4 power-ups, hidden portal & phantom AI |
 | <img src="screenshots/battle-city.png" width="150" alt="Battle City"> | **Battle City**<br>`BattleCity.jsx` | Action | 26×26 mini-tile arena, Eagle HQ fortress, brick/steel/water/ice/trees, 4 enemy tank types, 6 bonuses, 8 maps |
-| *Pending capture* | **Sokoban**<br>`Sokoban.jsx` | Logic | 20 solver-verified crate puzzles, unlimited in-play Undo, BFS click-to-move, per-stage best moves/pushes saved |
+| <img src="screenshots/sokoban.png" width="150" alt="Sokoban"> | **Sokoban**<br>`Sokoban.jsx` | Logic | 20 solver-verified crate puzzles, unlimited in-play Undo, BFS click-to-move, per-stage best moves/pushes saved |
 
 ## Quick start
 
