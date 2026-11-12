@@ -14,8 +14,28 @@ let revision = 0;
 let host;
 let games = [];
 
+function fitFullscreenGame() {
+    if (document.fullscreenElement !== stage) return;
+    const dialog = gameRoot.querySelector(".game-dialog");
+    const boards = [...dialog.querySelectorAll("canvas")];
+    const toolbar = fullscreen.parentElement;
+    const stageStyle = getComputedStyle(stage);
+    const displayedHeight = boards.reduce((height, board) => height + board.getBoundingClientRect().height, 0);
+    const boardHeight = boards.reduce((height, board) => height + board.height, 0);
+    const controlsHeight = dialog.getBoundingClientRect().height - displayedHeight;
+    const availableHeight = stage.clientHeight - parseFloat(stageStyle.paddingTop) - parseFloat(stageStyle.paddingBottom)
+        - toolbar.getBoundingClientRect().height - parseFloat(getComputedStyle(toolbar).marginBottom) - controlsHeight;
+    for (const board of boards) {
+        const width = Math.max(1, Math.floor(availableHeight * board.width / boardHeight));
+        board.style.setProperty("--fullscreen-board-width", width + "px");
+    }
+}
+
+const fullscreenLayout = new ResizeObserver(fitFullscreenGame);
+
 function syncFullscreen() {
     const active = document.fullscreenElement === stage;
+    if (active) fitFullscreenGame();
     fullscreen.textContent = active ? "Exit full screen" : "Full screen";
     gameRoot.querySelector(".game-dialog")?.focus({ preventScroll: true });
 }
@@ -68,6 +88,7 @@ async function route() {
         if (current !== revision) return;
     }
     if (host) host.dispose();
+    fullscreenLayout.disconnect();
     host = null;
     gameRoot.replaceChildren();
     fullscreen.hidden = true;
@@ -85,10 +106,10 @@ async function route() {
         if (current !== revision) return;
         host = createHost(gameRoot, () => { location.hash = ""; });
         launch(host);
-        const boards = [...gameRoot.querySelectorAll("canvas")];
-        const totalHeight = boards.reduce((height, board) => height + board.height, 0);
-        for (const board of boards) {
-            board.style.setProperty("--fullscreen-width-factor", board.width / totalHeight);
+        fullscreenLayout.observe(stage);
+        fullscreenLayout.observe(fullscreen.parentElement);
+        for (const control of gameRoot.querySelector(".game-dialog").children) {
+            if (!(control instanceof HTMLCanvasElement)) fullscreenLayout.observe(control);
         }
         fullscreen.hidden = !document.fullscreenEnabled || !stage.requestFullscreen;
     } catch (cause) {
