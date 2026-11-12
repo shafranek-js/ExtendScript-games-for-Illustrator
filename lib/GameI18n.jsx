@@ -6,7 +6,10 @@
 // fallback  - I18N.en
 // key       - dictionary key
 // args      - optional array of values for {0}, {1}, ...
-function translateString(dict, fallbackDict, key, args) {
+// Avoid the global name "translateString": Illustrator's ScriptingSupport.aip
+// exposes an internal AI AAT Suite method with that name, causing Error 9900
+// on builds where AI AAT Suite is absent.
+function relaxTranslate(dict, fallbackDict, key, args) {
     var str = (dict && dict[key] !== undefined) ? dict[key]
         : ((fallbackDict && fallbackDict[key]) || key);
 

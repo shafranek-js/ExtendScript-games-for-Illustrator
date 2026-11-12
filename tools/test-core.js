@@ -155,12 +155,12 @@ check("makeRGBColor builds an RGBColor from an array", () => {
     assert(c.red === 12 && c.green === 34 && c.blue === 56, "wrong channels");
 });
 
-check("translateString falls back and substitutes placeholders", () => {
+check("relaxTranslate falls back and substitutes placeholders", () => {
     const dict = { en: { a: "Score {0} of {1}" }, cs: { a: "Skóre {0}" } };
-    assert(lib.translateString(dict.cs, dict.en, "a", [5, 9]) === "Skóre 5", "cs substitution");
-    assert(lib.translateString(dict.cs, dict.en, "a", [5]) === "Skóre 5", "args array");
-    assert(lib.translateString(dict.cs, dict.en, "missing", []) === "missing", "unknown key falls back to the key");
-    assert(lib.translateString(dict.en, dict.en, "a", [1, 2]) === "Score 1 of 2", "en substitution");
+    assert(lib.relaxTranslate(dict.cs, dict.en, "a", [5, 9]) === "Skóre 5", "cs substitution");
+    assert(lib.relaxTranslate(dict.cs, dict.en, "a", [5]) === "Skóre 5", "args array");
+    assert(lib.relaxTranslate(dict.cs, dict.en, "missing", []) === "missing", "unknown key falls back to the key");
+    assert(lib.relaxTranslate(dict.en, dict.en, "a", [1, 2]) === "Score 1 of 2", "en substitution");
 });
 
 check("getGameSaveFile uses the token", () => {

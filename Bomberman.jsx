@@ -427,7 +427,7 @@
         var args = [];
         var i;
         for (i = 1; i < arguments.length; i++) args.push(arguments[i]);
-        return translateString(I18N[currentLang] || I18N.en, I18N.en, key, args);
+        return relaxTranslate(I18N[currentLang] || I18N.en, I18N.en, key, args);
     }
 
     function setStatus(key) {
@@ -437,7 +437,7 @@
         currentStatusKey = key;
         currentStatusArgs = args;
         if (uiHooks.onStatus) {
-            uiHooks.onStatus(translateString(I18N[currentLang] || I18N.en, I18N.en, key, args));
+            uiHooks.onStatus(relaxTranslate(I18N[currentLang] || I18N.en, I18N.en, key, args));
         }
     }
 
@@ -1895,7 +1895,7 @@
             btnPause.text = nextPause;
             lastPauseLabel = nextPause;
         }
-        nextStatus = translateString(I18N[currentLang] || I18N.en, I18N.en, currentStatusKey, currentStatusArgs);
+        nextStatus = relaxTranslate(I18N[currentLang] || I18N.en, I18N.en, currentStatusKey, currentStatusArgs);
         if (forceLabels || nextStatus !== lastStatusShown) {
             statusText.text = nextStatus;
             lastStatusShown = nextStatus;

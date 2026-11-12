@@ -299,7 +299,7 @@ The custom `Group` area (`gameCanvas`) does not take keyboard focus on a mouse c
    - Included file (`lib/`) → BOM is forbidden, keep it ASCII-only.
    - Any editor or script that rewrites the file can silently strip the BOM — after edits run `node tools/check.js` (it will report an error) or `node tools/check.js --fix` (it will fix it).
 3. The `en / cs / ro / hi` dictionaries must have **the same set of keys** — otherwise `undefined` appears in the interface. This is checked automatically (`check.js`).
-4. Parameter substitution is `translateString(dict, fallbackDict, key, args)`, format `{0}`, `{1}`. The game keeps a one-line `tr(key, args)` wrapper.
+4. Parameter substitution is `relaxTranslate(dict, fallbackDict, key, args)`, format `{0}`, `{1}`. The game keeps a one-line `tr(key, args)` wrapper.
 
 A new service key present in all six dynamic games: `statusNoHeartbeat` — reports that autonomous animation is unavailable.
 

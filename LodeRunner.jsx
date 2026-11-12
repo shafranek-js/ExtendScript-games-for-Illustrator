@@ -163,7 +163,7 @@
     var currentLang = "en";
 
     function tr(key, args) {
-        return translateString(I18N[currentLang] || I18N.en, I18N.en, key, args);
+        return relaxTranslate(I18N[currentLang] || I18N.en, I18N.en, key, args);
     }
 
     // --------------------------------------------------------------- levels
