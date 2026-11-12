@@ -759,6 +759,10 @@ function writeKeyValueFile(file, pairs) {
 
     var MOVE_MS = 180;                   // ms per cell (runner: ~5.5 cells/sec)
     var GUARD_MOVE_MS = 410;             // ms per cell (guard: ~2.4 cells/sec, ~0.44x runner)
+    var GUARD_STRIDE_PX = TILE;          // Distance travelled in one full running cycle
+    var GUARD_STANCE = 0.41;             // Fraction of a cycle each foot is on the ground
+    var RUNNER_STRIDE_PX = TILE * 1.4;
+    var RUNNER_STANCE = 0.33;
     var FALL_MS = 70;                    // ms per cell while falling
     var DIG_SWING_MS = 180;              // ms laser dig beam
     var HOLE_MS = 7500;                  // a dug hole refills after this (7.5 s)
@@ -4117,7 +4121,9 @@ function writeKeyValueFile(file, pairs) {
         digging: 0,      // ms of the dig beam left
         digDir: 0,
         inHole: 0,       // ms stuck inside a hole
-        pendingDig: 0    // buffered dig input direction (-1 or 1)
+        pendingDig: 0,   // buffered dig input direction (-1 or 1)
+        landT: 0,        // ms of landing squash/recovery
+        fellCells: 0
     };
 
     var enemies = [];
@@ -4231,7 +4237,9 @@ function writeKeyValueFile(file, pairs) {
                         climbingOut: false,
                         hasGold: false,
                         goldSteps: 0,
-                        animPhase: 0
+                        animPhase: 0,
+                        landT: 0,
+                        fellCells: 0
                     });
                     ch = " ";
                 } else if (ch === "$") {
@@ -4254,6 +4262,8 @@ function writeKeyValueFile(file, pairs) {
         player.digging = 0;
         player.inHole = 0;
         player.pendingDig = 0;
+        player.landT = 0;
+        player.fellCells = 0;
         levelTime = 0;
 
         if (index > maxUnlockedLevel) {
@@ -4324,6 +4334,7 @@ function writeKeyValueFile(file, pairs) {
                 player.cy = belowY;
                 player.fromY = (belowY - 1) * TILE;
                 player.falling = true;
+                player.fellCells = 1;
                 player.moving = true;
                 player.moveT = 0;
                 player.fallT = 0;
@@ -4397,7 +4408,11 @@ function writeKeyValueFile(file, pairs) {
         if (here === "X" || !supported(player.cx, player.cy)) {
             player.falling = true;
         } else {
+            if (player.falling && player.fellCells > 0) {
+                player.landT = Math.min(130, 75 + player.fellCells * 16);
+            }
             player.falling = false;
+            player.fellCells = 0;
         }
 
         // Process buffered dig input
@@ -4413,16 +4428,28 @@ function writeKeyValueFile(file, pairs) {
         player.fallT = 0;
 
         var below = player.cy + 1;
-        if (below >= ROWS) { player.falling = false; return; }
+        if (below >= ROWS) {
+            if (player.fellCells > 0) player.landT = Math.min(130, 75 + player.fellCells * 16);
+            player.falling = false;
+            player.fellCells = 0;
+            return;
+        }
 
         var here = tileAt(player.cx, player.cy);
         if (here !== "X" && supported(player.cx, player.cy)) {
+            if (player.fellCells > 0) player.landT = Math.min(130, 75 + player.fellCells * 16);
             player.falling = false;
+            player.fellCells = 0;
             return;
         }
 
         var ch = tileAt(player.cx, below);
-        if (isSolid(ch)) { player.falling = false; return; }
+        if (isSolid(ch)) {
+            if (player.fellCells > 0) player.landT = Math.min(130, 75 + player.fellCells * 16);
+            player.falling = false;
+            player.fellCells = 0;
+            return;
+        }
 
         if (ch === "o") {
             // Drop inside the pit and be stuck there for a moment
@@ -4430,6 +4457,8 @@ function writeKeyValueFile(file, pairs) {
             player.px = player.cx * TILE;
             player.py = player.cy * TILE;
             player.falling = false;
+            player.fellCells = 0;
+            player.landT = 95;
             player.inHole = 450;
             return;
         }
@@ -4439,6 +4468,7 @@ function writeKeyValueFile(file, pairs) {
         player.fromY = player.py;
         player.moving = true;
         player.moveT = 0;
+        player.fellCells++;
     }
 
     function updatePlayer(dt) {
@@ -4447,6 +4477,10 @@ function writeKeyValueFile(file, pairs) {
             stateTimer = 1500;
             addScore(1500);
             return;
+        }
+
+        if (player.landT > 0) {
+            player.landT = Math.max(0, player.landT - dt);
         }
 
         if (player.digging > 0) {
@@ -4463,20 +4497,7 @@ function writeKeyValueFile(file, pairs) {
         }
 
         if (player.moving) {
-            var stepMs = player.falling ? FALL_MS : MOVE_MS;
-            player.moveT += dt / stepMs;
-            if (player.moveT >= 1) {
-                player.moveT = 1;
-                player.moving = false;
-                player.px = player.cx * TILE;
-                player.py = player.cy * TILE;
-                finishMove();
-                if (player.falling && !player.moving) updateFall(0);
-            } else {
-                var toX = player.cx * TILE, toY = player.cy * TILE;
-                player.px = player.fromX + (toX - player.fromX) * player.moveT;
-                player.py = player.fromY + (toY - player.fromY) * player.moveT;
-            }
+            advancePlayerMove(dt);
         } else if (player.falling) {
             updateFall(dt);
         } else {
@@ -4486,6 +4507,29 @@ function writeKeyValueFile(file, pairs) {
             } else {
                 tryStep(dt);
             }
+        }
+    }
+
+    function advancePlayerMove(dt) {
+        var stepMs = player.falling ? FALL_MS : MOVE_MS;
+        var remaining = (1 - player.moveT) * stepMs;
+        var toX = player.cx * TILE;
+        var toY = player.cy * TILE;
+        if (dt < remaining) {
+            player.moveT += dt / stepMs;
+            player.px = player.fromX + (toX - player.fromX) * player.moveT;
+            player.py = player.fromY + (toY - player.fromY) * player.moveT;
+            return;
+        }
+
+        var wasRunning = !player.falling && player.fromY === toY && player.fromX !== toX;
+        player.px = toX;
+        player.py = toY;
+        finishMove();
+        if (player.falling && !player.moving) {
+            updateFall(0);
+        } else if (wasRunning && gameState === "play" && !player.digging && tryStep()) {
+            advancePlayerMove(dt - remaining);
         }
     }
 
@@ -4576,16 +4620,42 @@ function writeKeyValueFile(file, pairs) {
             return;
         }
 
+        if (e.landT > 0) {
+            e.landT = Math.max(0, e.landT - dt);
+        }
+
+        advanceEnemy(e, dt);
+    }
+
+    function advanceEnemy(e, dt) {
         // 1. Process active movement/falling animation first (so falling into hole completes!)
         if (e.moving) {
             var stepMs = e.falling ? FALL_MS : GUARD_MOVE_MS;
-            e.moveT += dt / stepMs;
-            if (e.moveT >= 1) {
+            var remaining = (1 - e.moveT) * stepMs;
+            if (dt >= remaining) {
+                dt -= remaining;
+                var wasFalling = e.falling;
                 e.moveT = 1;
                 e.moving = false;
-                e.falling = false;
                 e.px = e.cx * TILE;
                 e.py = e.cy * TILE;
+
+                // Chain continuous fall step immediately without 1-frame idle flicker
+                if (wasFalling && !e.climbingOut && tileAt(e.cx, e.cy) !== "o") {
+                    var hFall = tileAt(e.cx, e.cy);
+                    if (!isLadder(hFall) && !isRope(hFall) && (!supported(e.cx, e.cy) || hFall === "X") && !blocked(e.cx, e.cy + 1)) {
+                        e.fellCells = (e.fellCells || 0) + 1;
+                        moveEnemy(e, 0, 1);
+                        e.falling = true;
+                        if (dt > 0) advanceEnemy(e, dt);
+                        return;
+                    }
+                }
+                if (wasFalling && (e.fellCells || 0) > 0) {
+                    e.landT = Math.min(120, 70 + e.fellCells * 15);
+                }
+                e.falling = false;
+                e.fellCells = 0;
 
                 // If guard just finished climbing out of a hole:
                 if (e.climbingOut) {
@@ -4595,6 +4665,7 @@ function writeKeyValueFile(file, pairs) {
                     if (blocked(e.cx + stepX, e.cy)) stepX = -stepX;
                     if (!blocked(e.cx + stepX, e.cy)) {
                         moveEnemy(e, stepX, 0);
+                        if (dt > 0) advanceEnemy(e, dt);
                     }
                     return;
                 }
@@ -4620,12 +4691,15 @@ function writeKeyValueFile(file, pairs) {
                 } else if ((e.goldSteps || 0) < 0) {
                     e.goldSteps++;
                 }
+                // Let the collision check see the arrival before starting the next step.
+                if (e.cx === player.cx && e.cy === player.cy) return;
             } else {
+                e.moveT += dt / stepMs;
                 var toX = e.cx * TILE, toY = e.cy * TILE;
                 e.px = e.fromX + (toX - e.fromX) * e.moveT;
                 e.py = e.fromY + (toY - e.fromY) * e.moveT;
+                return;
             }
-            return;
         }
 
         // 2. A guard in a dug hole is trapped (only after falling all the way inside!):
@@ -4663,13 +4737,15 @@ function writeKeyValueFile(file, pairs) {
         if (!isLadder(here) && !isRope(here) && (!supported(e.cx, e.cy) || here === "X") && !blocked(e.cx, e.cy + 1)) {
             moveEnemy(e, 0, 1);
             e.falling = true;
+            e.fellCells = 1;
+            if (dt > 0) advanceEnemy(e, dt);
             return;
         }
 
         var mv = chooseEnemyMove(e);
         if (mv[0] !== 0 || mv[1] !== 0) {
             moveEnemy(e, mv[0], mv[1]);
-            return;
+            if (dt > 0) advanceEnemy(e, dt);
         }
     }
 
@@ -5013,41 +5089,48 @@ function writeKeyValueFile(file, pairs) {
         return curX;
     }
 
-    // -------------------------------------------------------- apple ii sprites
+    // --------------------------------------------------- character animation
 
-    // 10x11 authentic Apple II arcade sprite matrices (scaled 2x to 20x22 in 24x24 tile):
-    // C: Cyan cap, W: White body/limbs, O: Orange guard body, R: Red hat (guard with gold)
     function getCharacterPose(ent, isPlayer) {
         var dir = ent.dir >= 0 ? 1 : -1;
         var shakeX = 0;
         if (isPlayer && ent.digging > 0) {
             return {
                 mode: "dig",
-                phase: ent.digging / 220,
+                phase: 1 - ent.digging / DIG_SWING_MS,
                 dir: ent.digDir || dir,
                 shakeX: 0
             };
         }
         if (ent.falling) {
-            return { mode: "fall", phase: ent.py * 0.18, dir: dir, shakeX: 0 };
+            return { mode: "fall", phase: ent.py * 0.055, dir: dir, shakeX: 0 };
         }
-        if (!isPlayer && ent.inHole > 0) {
+        if (ent.inHole > 0) {
             if (ent.inHole < 1000) shakeX = Math.sin(ent.inHole * 0.08) * 1.8;
-            return { mode: "fall", phase: 0, dir: dir, shakeX: shakeX };
+            return { mode: "trapped", phase: ent.inHole * 0.025, dir: dir, shakeX: shakeX };
         }
         var col = Math.max(0, Math.min(COLS - 1, Math.round(ent.px / TILE)));
         var row = Math.max(0, Math.min(ROWS - 1, Math.round(ent.py / TILE)));
         var ch = tileAt(col, row);
-        if (isLadder(ch)) {
-            return { mode: "ladder", phase: ent.py * 0.34, dir: dir, shakeX: 0 };
+        if (isLadder(ch) || (ent.moving && ent.fromY !== ent.cy * TILE)) {
+            return { mode: "ladder", phase: ent.py * Math.PI * 1.25 / TILE, dir: dir, shakeX: 0 };
         }
         if (isRope(ch)) {
-            return { mode: "rope", phase: ent.px * 0.28, dir: dir, shakeX: 0 };
+            return { mode: "rope", phase: ent.px * dir * Math.PI * 1.2 / TILE, dir: dir, shakeX: 0 };
         }
         if (ent.moving || Math.abs(ent.px - ent.cx * TILE) > 0.5 || Math.abs(ent.py - ent.cy * TILE) > 0.5) {
-            return { mode: "run", phase: ent.px * 0.28, dir: dir, shakeX: 0 };
+            var cycleLength = isPlayer ? RUNNER_STRIDE_PX : GUARD_STRIDE_PX;
+            return { mode: "run", phase: ent.px * dir * 2 * Math.PI / cycleLength, dir: dir, shakeX: 0 };
         }
-        return { mode: "idle", phase: 0, dir: dir, shakeX: 0 };
+        if ((ent.landT || 0) > 0) {
+            return { mode: "land", phase: Math.min(1, ent.landT / 120), dir: dir, shakeX: 0 };
+        }
+        return {
+            mode: "idle",
+            phase: levelTime * 3.6 + (isPlayer ? 0 : (ent.cx || 0) * 1.1),
+            dir: dir,
+            shakeX: 0
+        };
     }
 
     function solveJoint(ax, ay, bx, by, l1, l2, bendX, bendY) {
@@ -5074,208 +5157,337 @@ function writeKeyValueFile(file, pairs) {
         return [mx + px * h, my + py * h];
     }
 
+    function fillCharacterShape(g, x, y, scale, dir, points, brush) {
+        g.newPath();
+        g.moveTo(x + dir * scale * points[0], y + scale * points[1]);
+        for (var i = 2; i < points.length; i += 2) {
+            g.lineTo(x + dir * scale * points[i], y + scale * points[i + 1]);
+        }
+        g.closePath();
+        g.fillPath(brush);
+    }
+
+    function fillCharacterSegment(g, ax, ay, bx, by, startWidth, endWidth, brush) {
+        var dx = bx - ax;
+        var dy = by - ay;
+        var length = Math.sqrt(dx * dx + dy * dy) || 1;
+        var nx = -dy / length;
+        var ny = dx / length;
+        fillCharacterShape(g, ax, ay, 1, 1, [
+            nx * startWidth, ny * startWidth,
+            dx + nx * endWidth, dy + ny * endWidth,
+            dx - nx * endWidth, dy - ny * endWidth,
+            -nx * startWidth, -ny * startWidth
+        ], brush);
+    }
+
+    function drawCharacterBoot(g, x, y, sc, dir, toeDrop, brush) {
+        var toe = toeDrop / sc;
+        fillCharacterShape(g, x, y, sc, dir, [
+            -0.9, -1.0, 0.45, -1.0, 0.8, toe - 0.5,
+            1.85, toe - 0.2, 2.1, toe + 0.35, 1.7, toe + 0.85, -0.9, 0.85
+        ], brush);
+    }
+
+    function sampleRunningFoot(cycle, stride, stance, liftHeight) {
+        var contactX = stride * stance * 0.5;
+        if (cycle < stance) {
+            // Cancel the actor's advance during contact so the sole stays planted.
+            return { x: contactX - stride * cycle, lift: 0, toe: 0 };
+        }
+        var swingDuration = 1 - stance;
+        var t = (cycle - stance) / swingDuration;
+        var arc = t * (1 - t);
+        var forward = t * t * (3 - 2 * t);
+        // Match the stance velocity at lift-off and touchdown.
+        var x = (2 * forward - 1) * contactX - stride * swingDuration * arc * (1 - 2 * t);
+        var lift = liftHeight * arc * (1 - 0.42 * t);
+        return { x: x, lift: lift, toe: lift * (0.32 - 0.44 * t) };
+    }
+
     function drawVectorCharacter(g, isGuard, cx, baseY, sc, dir, mode, phase, hasGold, pal) {
         var d = dir >= 0 ? 1 : -1;
         var s = Math.sin(phase);
+        var c = Math.cos(phase);
         var bob = 0;
         var lean = 0;
+        var recoil = 0;
+        var breath = mode === "idle" ? s * 0.35 * sc : 0;
+        var runCycle = phase / (2 * Math.PI);
+        runCycle -= Math.floor(runCycle);
+        var stance = isGuard ? GUARD_STANCE : RUNNER_STANCE;
+
         if (mode === "run") {
-            bob = Math.abs(s) * 0.9 * sc;
-            lean = d * 1.1 * sc;
+            // The hips compress over the supporting foot and rise before the next contact.
+            bob = -Math.cos((runCycle - stance * 0.5) * 4 * Math.PI) * (isGuard ? 0.95 : 1.15) * sc;
+            lean = d * (isGuard ? 2.65 : 3.05) * sc;
         } else if (mode === "dig") {
-            lean = d * 1.8 * sc;
+            recoil = Math.max(0, 1 - phase * 2.5) * sc;
+            bob = -1.2 * sc;
+            lean = d * (1.8 * sc - recoil);
         } else if (mode === "rope") {
-            bob = -3.8 * sc;
-            lean = d * 0.6 * sc;
+            bob = -4.9 * sc + Math.abs(s) * 0.7 * sc;
+            lean = d * (0.6 + c * 0.65) * sc;
         } else if (mode === "fall") {
-            bob = 0.6 * sc;
-            lean = -d * 1.1 * sc + s * 0.5 * sc;
+            bob = 0.7 * sc;
+            lean = -d * 1.3 * sc + s * 0.35 * sc;
+        } else if (mode === "land") {
+            var landS = Math.sin(Math.min(1, Math.max(0, phase)) * Math.PI);
+            bob = -landS * 2.2 * sc;
+            lean = d * landS * 1.4 * sc;
+        } else if (mode === "trapped") {
+            bob = (-2.0 + Math.abs(s) * 0.8) * sc;
+        } else {
+            bob = breath;
         }
 
-        var footY = baseY - 1.0 * sc;
-        var hipY = baseY - 8.8 * sc - bob;
-        var waistY = baseY - 10.6 * sc - bob;
-        var shY = baseY - 14.6 * sc - bob;
-        var headY = baseY - 18.4 * sc - bob;
+        var footY = baseY - 0.9 * sc;
+        var hipY = baseY - 9.1 * sc - bob;
+        var waistY = baseY - 11.2 * sc - bob;
+        var shY = baseY - 14.9 * sc - bob;
+        var headY = baseY - 18.15 * sc - bob;
+        if (mode === "rope") {
+            hipY -= 1.5 * sc;
+            waistY -= 0.65 * sc;
+        } else if (mode === "idle") {
+            hipY -= 0.45 * sc;
+        }
 
         var hipX = cx + lean * 0.25;
-        var waistX = cx + lean * 0.6;
+        var waistX = cx + lean * 0.62;
         var shX = cx + lean;
-        var headX = cx + lean * 1.2;
+        var headX = cx + lean * 1.15;
 
-        var thighL = 4.2 * sc;
-        var shinL = 4.2 * sc;
+        var thighL = 4.4 * sc;
+        var shinL = 4.4 * sc;
         var uArmL = 3.1 * sc;
         var fArmL = 2.9 * sc;
 
-        var thighR = 1.15 * sc;
-        var shinR = 0.92 * sc;
-        var bootR = 0.95 * sc;
-        var uArmR = 0.88 * sc;
-        var fArmR = 0.74 * sc;
-        var handR = 0.82 * sc;
-        var headR = 2.45 * sc;
+        var thighR = (isGuard ? 1.38 : 1.12) * sc;
+        var shinR = (isGuard ? 1.12 : 0.88) * sc;
+        var uArmR = (isGuard ? 1.22 : 0.92) * sc;
+        var fArmR = (isGuard ? 0.98 : 0.76) * sc;
+        var handR = 0.88 * sc;
+        var facingBack = mode === "ladder";
 
-        // Default idle pose: natural stance, arms relaxed at sides
-        var bFootX = hipX - d * 1.6 * sc;
+        // Default idle pose: poised stance, subtle breathing sway
+        var bFootX = hipX - d * 1.65 * sc;
         var bFootY = footY;
-        var fFootX = hipX + d * 1.7 * sc;
+        var fFootX = hipX + d * 1.75 * sc;
         var fFootY = footY;
-        var bHandX = shX - d * 1.2 * sc;
-        var bHandY = hipY + 0.6 * sc;
-        var fHandX = shX + d * 1.3 * sc;
-        var fHandY = hipY + 0.6 * sc;
+        var bHandX = shX - d * (1.25 + breath * 0.4) * sc;
+        var bHandY = hipY + 0.4 * sc - breath * 0.5;
+        var fHandX = shX + d * (1.45 - breath * 0.4) * sc;
+        var fHandY = hipY + 0.4 * sc - breath * 0.5;
+        var bToeDrop = 0;
+        var fToeDrop = 0;
         var kneeBendX = d;
-        var kneeBendY = -0.15;
+        var kneeBendY = -0.2;
         var elbowBendX = -d;
-        var elbowBendY = 0.2;
+        var elbowBendY = 0.25;
 
         if (mode === "run") {
-            var stride = s * 4.5 * sc;
-            var liftB = Math.max(0, -s) * 2.8 * sc;
-            var liftF = Math.max(0, s) * 2.8 * sc;
-            bFootX = hipX - d * stride - Math.max(0, -s) * d * 1.2 * sc;
-            bFootY = footY - liftB;
-            fFootX = hipX + d * stride - Math.max(0, s) * d * 1.2 * sc;
-            fFootY = footY - liftF;
-            bHandX = shX + d * s * 3.8 * sc;
-            bHandY = waistY + 1.2 * sc - Math.max(0, s) * 1.6 * sc;
-            fHandX = shX - d * s * 3.8 * sc;
-            fHandY = waistY + 1.2 * sc - Math.max(0, -s) * 1.6 * sc;
+            var stride = isGuard ? GUARD_STRIDE_PX : RUNNER_STRIDE_PX;
+            var liftHeight = isGuard ? 21 : 25;
+            var rear = sampleRunningFoot((runCycle + 0.5) % 1, stride, stance, liftHeight);
+            var front = sampleRunningFoot(runCycle, stride, stance, liftHeight);
+            bFootX = cx + d * rear.x * sc;
+            bFootY = footY - rear.lift * sc;
+            fFootX = cx + d * front.x * sc;
+            fFootY = footY - front.lift * sc;
+            bToeDrop = rear.toe * sc;
+            fToeDrop = front.toe * sc;
+            // Sprinter arm pump: front hand drives up to chest, back hand drives behind hip
+            var bArmF = Math.cos(phase - stance * Math.PI) * (isGuard ? 0.82 : 1);
+            var fArmF = -bArmF;
+            bHandX = shX + d * (bArmF > 0 ? bArmF * 3.5 : bArmF * 3.1) * sc;
+            bHandY = shY + (2.8 - bArmF * 2.4) * sc;
+            fHandX = shX + d * (fArmF > 0 ? fArmF * 3.5 : fArmF * 3.1) * sc;
+            fHandY = shY + (2.8 - fArmF * 2.4) * sc;
+            kneeBendX = d;
+            kneeBendY = -0.35;
+            elbowBendX = -d;
+            elbowBendY = 0.7;
         } else if (mode === "ladder") {
             var climb = s;
             bFootX = hipX - 2.6 * sc;
             fFootX = hipX + 2.6 * sc;
-            bFootY = footY - (0.5 + 0.5 * climb) * 3.4 * sc;
-            fFootY = footY - (0.5 - 0.5 * climb) * 3.4 * sc;
-            bHandX = shX - 4.2 * sc;
-            fHandX = shX + 4.2 * sc;
-            bHandY = shY - 1.6 * sc - climb * 3.2 * sc;
-            fHandY = shY - 1.6 * sc + climb * 3.2 * sc;
+            bFootY = footY - (0.45 + 0.55 * climb) * 3.3 * sc;
+            fFootY = footY - (0.45 - 0.55 * climb) * 3.3 * sc;
+            bHandX = shX - 3.7 * sc;
+            fHandX = shX + 3.7 * sc;
+            bHandY = shY - 2.1 * sc - climb * 2.3 * sc;
+            fHandY = shY - 2.1 * sc + climb * 2.3 * sc;
             kneeBendX = 0;
             kneeBendY = -1;
             elbowBendX = 0;
             elbowBendY = 1;
         } else if (mode === "rope") {
-            var swing = s;
-            var ropeY = baseY - 16.0 * sc;
-            bHandX = shX + d * (-2.2 + swing * 2.0) * sc;
-            fHandX = shX + d * (2.6 + swing * 2.0) * sc;
-            bHandY = ropeY;
-            fHandY = ropeY;
-            bFootX = hipX - d * 1.4 * sc - swing * 2.8 * sc;
-            fFootX = hipX + d * 1.8 * sc - swing * 2.8 * sc;
-            bFootY = footY - 1.6 * sc + Math.abs(swing) * 0.8 * sc;
-            fFootY = footY - 0.8 * sc + Math.abs(swing) * 0.6 * sc;
-            kneeBendX = d;
-            kneeBendY = -0.3;
-            elbowBendX = -d;
-            elbowBendY = 0.6;
-        } else if (mode === "fall") {
-            var fCos = Math.cos(phase);
-            bHandX = shX - d * 3.2 * sc + fCos * 1.4 * sc;
-            fHandX = shX + d * 3.5 * sc - fCos * 1.4 * sc;
-            bHandY = shY - 2.6 * sc + s * 1.8 * sc;
-            fHandY = shY - 2.6 * sc - s * 1.8 * sc;
-            bFootX = hipX - d * (1.8 + s * 1.4) * sc;
-            fFootX = hipX + d * (2.0 - s * 1.4) * sc;
-            bFootY = footY - (2.2 + Math.max(0, s) * 1.6) * sc;
-            fFootY = footY - (2.2 + Math.max(0, -s) * 1.6) * sc;
+            var ropeY = baseY - 15.8 * sc;
+            bHandX = cx + d * (-1.7 - c * 3.2) * sc;
+            fHandX = cx + d * (1.7 + c * 3.2) * sc;
+            bHandY = ropeY + Math.max(0, s) * 2.4 * sc;
+            fHandY = ropeY + Math.max(0, -s) * 2.4 * sc;
+            bFootX = hipX - d * (2.5 + c * 2.1) * sc;
+            fFootX = hipX - d * (0.7 + c * 2.1) * sc;
+            bFootY = footY - (1.2 + Math.max(0, s) * 1.9) * sc;
+            fFootY = footY - (0.7 + Math.max(0, -s) * 1.9) * sc;
+            bToeDrop = 0.75 * sc;
+            fToeDrop = 0.75 * sc;
             kneeBendX = d;
             kneeBendY = -0.35;
+            elbowBendX = -d;
+            elbowBendY = 0.55;
+        } else if (mode === "fall") {
+            // Composed braced air silhouette: knees tucked asymmetrically, bent arms balancing
+            bHandX = shX - d * 2.9 * sc + c * 0.9 * sc;
+            fHandX = shX + d * 3.2 * sc - c * 0.9 * sc;
+            bHandY = shY - 2.9 * sc + s * 1.1 * sc;
+            fHandY = shY - 2.9 * sc - s * 1.1 * sc;
+            bFootX = hipX - d * (1.4 + s * 0.7) * sc;
+            fFootX = hipX + d * (2.5 - s * 0.7) * sc;
+            bFootY = footY - (2.8 + Math.max(0, s) * 1.1) * sc;
+            fFootY = footY - (1.7 + Math.max(0, -s) * 1.1) * sc;
+            bToeDrop = 0.9 * sc;
+            fToeDrop = 0.9 * sc;
+            kneeBendX = d;
+            kneeBendY = -0.45;
             elbowBendX = 0;
-            elbowBendY = 0.8;
+            elbowBendY = 0.75;
+        } else if (mode === "land") {
+            bFootX = hipX - d * 2.2 * sc;
+            fFootX = hipX + d * 2.3 * sc;
+            bHandX = shX - d * 2.4 * sc;
+            fHandX = shX + d * 2.6 * sc;
+            bHandY = waistY + 0.6 * sc;
+            fHandY = waistY + 0.4 * sc;
+            kneeBendX = d;
+            kneeBendY = -0.45;
+            elbowBendX = -d;
+            elbowBendY = 0.5;
         } else if (mode === "dig") {
-            bFootX = hipX - d * 3.2 * sc;
-            fFootX = hipX + d * 2.8 * sc;
-            bHandX = shX - d * 2.5 * sc;
+            bFootX = hipX - d * 3.4 * sc;
+            fFootX = hipX + d * 2.9 * sc;
+            bHandX = shX - d * 2.6 * sc;
             bHandY = waistY + 0.8 * sc;
-            fHandX = shX + d * 5.0 * sc;
-            fHandY = shY + 0.6 * sc;
+            fHandX = shX + d * (4.7 * sc - recoil);
+            fHandY = shY + 2.0 * sc - recoil;
+            kneeBendX = d;
+            kneeBendY = -0.35;
+        } else if (mode === "trapped") {
+            bFootX = hipX - 2.5 * sc;
+            fFootX = hipX + 2.5 * sc;
+            bFootY = footY - 2.2 * sc;
+            fFootY = bFootY;
+            bHandX = shX - 4.4 * sc;
+            fHandX = shX + 4.4 * sc;
+            bHandY = shY - (1.4 + s * 0.9) * sc;
+            fHandY = shY - (1.4 - s * 0.9) * sc;
+            elbowBendX = 0;
+            elbowBendY = 0.9;
         }
 
-        // Solve knee and elbow joints
+        // Spread the joint anchors across the pelvis and shoulders.
+        var hipOffset = (facingBack ? 1.1 : d * 0.62) * sc;
+        var shoulderOffset = (facingBack ? 1.7 : d * 0.85) * sc;
+        var bHipX = hipX - hipOffset;
+        var fHipX = hipX + hipOffset;
+        var bShoulderX = shX - shoulderOffset;
+        var fShoulderX = shX + shoulderOffset;
         var bKnee = solveJoint(
-            hipX, hipY, bFootX, bFootY, thighL, shinL,
+            bHipX, hipY, bFootX, bFootY, thighL, shinL,
             mode === "ladder" ? -1 : kneeBendX, kneeBendY
         );
         var fKnee = solveJoint(
-            hipX, hipY, fFootX, fFootY, thighL, shinL,
+            fHipX, hipY, fFootX, fFootY, thighL, shinL,
             mode === "ladder" ? 1 : kneeBendX, kneeBendY
         );
         var bElbow = solveJoint(
-            shX, shY, bHandX, bHandY, uArmL, fArmL,
+            bShoulderX, shY, bHandX, bHandY, uArmL, fArmL,
             mode === "ladder" ? -1 : elbowBendX, elbowBendY
         );
         var fElbow = solveJoint(
-            shX, shY, fHandX, fHandY, uArmL, fArmL,
+            fShoulderX, shY, fHandX, fHandY, uArmL, fArmL,
             mode === "ladder" ? 1 : elbowBendX, elbowBendY
         );
 
         // Back leg + boot
-        fillCapsule(g, hipX, hipY, bKnee[0], bKnee[1], thighR, pal.legShade);
-        fillCapsule(g, bKnee[0], bKnee[1], bFootX, bFootY, shinR, pal.legShade);
-        fillCapsule(g, bFootX - d * 0.3 * sc, bFootY, bFootX + d * 1.4 * sc, bFootY, bootR, pal.bootShade);
+        fillCapsule(g, bHipX, hipY, bKnee[0], bKnee[1], thighR, pal.legShade);
+        fillCharacterSegment(g, bKnee[0], bKnee[1], bFootX, bFootY, shinR, shinR * 0.66, pal.legShade);
+        drawCharacterBoot(g, bFootX, bFootY, sc, facingBack ? -1 : d, bToeDrop, pal.bootShade);
 
         // Back arm + hand
-        fillCapsule(g, shX, shY, bElbow[0], bElbow[1], uArmR, pal.armShade);
-        fillCapsule(g, bElbow[0], bElbow[1], bHandX, bHandY, fArmR, pal.armShade);
+        fillCapsule(g, bShoulderX, shY, bElbow[0], bElbow[1], uArmR, pal.armShade);
+        fillCharacterSegment(g, bElbow[0], bElbow[1], bHandX, bHandY, fArmR, fArmR * 0.64, pal.armShade);
         fillBatchCircles(g, [[bHandX, bHandY, handR]], pal.skinShade);
 
-        // Torso (chest + waist + belt)
-        fillCapsule(g, shX, shY, waistX, waistY, 2.05 * sc, pal.torso);
-        fillCapsule(g, waistX, waistY, hipX, hipY, 1.75 * sc, pal.torso);
-        fillCapsule(g, waistX - 1.3 * sc, hipY - 0.5 * sc, waistX + 1.3 * sc, hipY - 0.5 * sc, 0.55 * sc, pal.belt);
+        // One silhouette for the chest, waist and pelvis.
+        var chest = (isGuard ? 2.85 : 2.25) * sc;
+        var waist = (isGuard ? 1.8 : 1.52) * sc;
+        fillCharacterShape(g, hipX, hipY, 1, 1, [
+            shX - hipX - chest * 0.65, shY - hipY - 0.85 * sc,
+            shX - hipX + chest * 0.65, shY - hipY - 0.85 * sc,
+            shX - hipX + chest, shY - hipY + 0.65 * sc,
+            waistX - hipX + waist, waistY - hipY,
+            waist + 0.2 * sc, 0.45 * sc, -waist - 0.2 * sc, 0.45 * sc,
+            waistX - hipX - waist, waistY - hipY,
+            shX - hipX - chest, shY - hipY + 0.65 * sc
+        ], pal.torso);
+        fillCapsule(g, hipX - waist * 0.88, hipY - 0.5 * sc, hipX + waist * 0.88, hipY - 0.5 * sc, 0.42 * sc, pal.belt);
 
         // Front leg + boot
-        fillCapsule(g, hipX, hipY, fKnee[0], fKnee[1], thighR, pal.leg);
-        fillCapsule(g, fKnee[0], fKnee[1], fFootX, fFootY, shinR, pal.leg);
-        fillCapsule(g, fFootX - d * 0.3 * sc, fFootY, fFootX + d * 1.5 * sc, fFootY, bootR, pal.boot);
+        fillCapsule(g, fHipX, hipY, fKnee[0], fKnee[1], thighR, pal.leg);
+        fillCharacterSegment(g, fKnee[0], fKnee[1], fFootX, fFootY, shinR, shinR * 0.66, pal.leg);
+        drawCharacterBoot(g, fFootX, fFootY, sc, facingBack ? 1 : d, fToeDrop, pal.boot);
 
         // Neck + head (skin tone)
-        fillCapsule(g, shX, shY - 0.8 * sc, headX, headY + 1.2 * sc, 0.9 * sc, pal.skin);
-        fillBatchCircles(g, [[headX, headY, headR]], pal.skin);
+        fillCapsule(g, shX, shY - 0.5 * sc, headX, headY + 1.05 * sc, 0.78 * sc, pal.skinShade);
 
         // Helmet / cap & face eye
-        if (mode !== "ladder") {
-            fillCapsule(
-                g,
-                headX - d * 2.0 * sc, headY - 1.6 * sc,
-                headX + d * 1.8 * sc, headY - 1.8 * sc,
-                1.35 * sc, pal.cap
-            );
-            fillCapsule(
-                g,
-                headX + d * 0.6 * sc, headY - 1.3 * sc,
-                headX + d * 3.0 * sc, headY - 1.1 * sc,
-                0.65 * sc, pal.visor
-            );
-            fillBatchCircles(g, [[headX + d * 1.25 * sc, headY - 0.1 * sc, 0.5 * sc]], pal.eye);
-        } else {
-            fillCapsule(
-                g,
-                headX - 2.1 * sc, headY - 1.6 * sc,
-                headX + 2.1 * sc, headY - 1.6 * sc,
-                1.3 * sc, pal.cap
-            );
+        var face = facingBack
+            ? [-1.6, -1.25, 1.6, -1.25, 1.55, 0.85, 0.85, 1.55, -0.85, 1.55, -1.55, 0.85]
+            : [-1.55, -1.35, 1.35, -1.35, 1.65, -0.35, 2.12, 0.24, 1.53, 0.55, 1.3, 1.45, 0.52, 1.8, -1.08, 1.36, -1.6, 0.35];
+        fillCharacterShape(g, headX, headY, sc, d, face, pal.skin);
+        fillCharacterShape(g, headX, headY, sc, d, [
+            -2.05, -0.75, -2.0, -2.0, -1.22, -2.85, 0.85, -2.85,
+            1.9, -2.17, 2.14, -1.04, 1.5, -0.77, -1.47, -0.67
+        ], pal.cap);
+        if (!facingBack) {
+            fillCapsule(g, headX + d * 0.95 * sc, headY - 0.95 * sc,
+                headX + d * 2.7 * sc, headY - 0.95 * sc, 0.35 * sc, pal.visor);
+            fillBatchCircles(g, [[headX + d * 1.1 * sc, headY - 0.12 * sc, 0.33 * sc]], pal.eye);
         }
 
-        // Guard carrying gold badge
+        // Chest lamp + tactical hip canister mark the runner; gold pack marks guarding thief
+        if (!isGuard) {
+            fillBatchCircles(g, [[shX + (mode === "ladder" ? 0 : d * 1.05 * sc), shY + 1.3 * sc, 0.78 * sc]], pal.cap);
+            if (mode !== "ladder") {
+                fillBatchCircles(g, [[waistX - d * 1.1 * sc, hipY - 0.45 * sc, 0.7 * sc]], pal.cap);
+            }
+        }
         if (isGuard && hasGold) {
-            fillBatchCircles(g, [[headX, headY - 4.0 * sc, 1.35 * sc]], pal.gold);
+            fillCapsule(
+                g,
+                shX - d * 2.4 * sc, shY + 0.6 * sc,
+                waistX - d * 2.4 * sc, waistY + 0.2 * sc,
+                1.45 * sc, pal.gold
+            );
         }
 
         // Front arm + hand (+ dig blaster)
-        fillCapsule(g, shX, shY, fElbow[0], fElbow[1], uArmR, pal.arm);
-        fillCapsule(g, fElbow[0], fElbow[1], fHandX, fHandY, fArmR, pal.arm);
+        fillCapsule(g, fShoulderX, shY, fElbow[0], fElbow[1], uArmR, pal.arm);
+        fillCharacterSegment(g, fElbow[0], fElbow[1], fHandX, fHandY, fArmR, fArmR * 0.64, pal.arm);
         fillBatchCircles(g, [[fHandX, fHandY, handR]], pal.skin);
         if (mode === "dig") {
+            var muzzleX = fHandX + d * (3.1 * sc - recoil);
+            var muzzleY = fHandY + 1.2 * sc - recoil;
             fillCapsule(
                 g,
                 fHandX, fHandY,
-                fHandX + d * 2.6 * sc, fHandY + 0.3 * sc,
+                muzzleX, muzzleY,
                 0.8 * sc, pal.cap
             );
+            return [muzzleX, muzzleY];
         }
     }
 
@@ -5333,8 +5545,8 @@ function writeKeyValueFile(file, pairs) {
             bootShade: bootShadeB,
             belt: beltB,
             eye: eyeB,
-            cap: cyanB,
-            visor: cyanB,
+            cap: orangeB,
+            visor: orangeShadeB,
             gold: goldOrgB
         };
         var guardPalGold = {
@@ -5468,14 +5680,14 @@ function writeKeyValueFile(file, pairs) {
         var pPose = getCharacterPose(player, true);
         var pCx = player.px + TILE * 0.5 + pPose.shakeX;
         var pBaseY = player.py + TILE - 1 + (player.inHole > 0 ? 4 : 0);
-        drawVectorCharacter(g, false, pCx, pBaseY, 1, pPose.dir, pPose.mode, pPose.phase, false, runnerPal);
+        var muzzle = drawVectorCharacter(g, false, pCx, pBaseY, 1, pPose.dir, pPose.mode, pPose.phase, false, runnerPal);
 
         // Digging beam & sparks (authentic Apple II diagonal laser ray)
-        if (player.digging > 0) {
+        if (muzzle) {
             var targetCx = player.cx + player.digDir;
             var targetCy = player.cy + 1;
-            var gunX = pCx + player.digDir * 7;
-            var gunY = pBaseY - 12;
+            var gunX = muzzle[0];
+            var gunY = muzzle[1];
             var hitX = targetCx * TILE + (player.digDir > 0 ? 8 : 16);
             var hitY = targetCy * TILE + 4;
 

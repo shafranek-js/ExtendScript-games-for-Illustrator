@@ -243,6 +243,27 @@ check("guard walks toward the runner", () => {
     assert(e.cx !== x0, "guard did not move at all");
 });
 
+check("guard keeps running across cell boundaries without losing frame time", () => {
+    api.load(0);
+    for (let x = 1; x < 27; x++) {
+        api.setTile(x, 14, " ");
+        api.setTile(x, 15, "#");
+    }
+    api.tp(25, 14);
+    const guard = api.enemyAt(0);
+    Object.assign(guard, { cx: 2, cy: 14, px: 2 * 24, py: 14 * 24, moving: false });
+
+    api.update(16);
+    const frameDistance = guard.px - 2 * 24;
+    assert(frameDistance > 0, "guard did not start running");
+    for (let frame = 0; frame < 60; frame++) {
+        const x = guard.px;
+        api.update(16);
+        assert(guard.moving, "guard switched to idle during pursuit");
+        assert(Math.abs(guard.px - x - frameDistance) < 0.001, "guard lost time at a cell boundary");
+    }
+});
+
 check("guard falls into a hole and is trapped", () => {
     api.load(0);
     const e = api.enemyAt(0);
@@ -293,8 +314,8 @@ check("runner walks across trapped guard head", () => {
     api.tp(5, 13);
     api.press("RIGHT");
     api.update(200);
-    api.update(200);
     api.release("RIGHT");
+    api.update(200);
     assert(api.x === 6, "runner could not step onto guard head: x=" + api.x);
     assert(api.state === "play", "runner was killed by trapped guard");
 });
