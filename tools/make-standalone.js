@@ -19,7 +19,10 @@ const ALL_GAMES = [
     "Snake.jsx",
     "SpaceInvaders.jsx",
     "Tetris.jsx",
-    "LodeRunner.jsx"
+    "LodeRunner.jsx",
+    "Xonix.jsx",
+    "Bomberman.jsx",
+    "BattleCity.jsx"
 ];
 
 function buildStandalone(file) {

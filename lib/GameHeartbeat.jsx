@@ -36,6 +36,7 @@ function hbBuildCs() {
         "public class Win32Heartbeat { " +
         "[StructLayout(LayoutKind.Sequential)] public struct POINT { public int X; public int Y; } " +
         "[StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; } " +
+        "[StructLayout(LayoutKind.Sequential)] public struct GUITHREADINFO { public int cbSize; public uint flags; public IntPtr hwndActive; public IntPtr hwndFocus; public IntPtr hwndCapture; public IntPtr hwndMenuOwner; public IntPtr hwndMoveSize; public IntPtr hwndCaret; public RECT rcCaret; } " +
         "public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam); " +
         "[DllImport(\"user32.dll\", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindow(IntPtr lpClassName, string lpWindowName); " +
         "[DllImport(\"user32.dll\")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam); " +
@@ -44,6 +45,7 @@ function hbBuildCs() {
         "[DllImport(\"user32.dll\")] public static extern bool IsWindowVisible(IntPtr hWnd); " +
         "[DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); " +
         "[DllImport(\"user32.dll\")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId); " +
+        "[DllImport(\"user32.dll\")] public static extern bool GetGUIThreadInfo(uint idThread, ref GUITHREADINFO lpgui); " +
         "[DllImport(\"user32.dll\")] public static extern bool GetCursorPos(out POINT lpPoint); " +
         "[DllImport(\"user32.dll\")] public static extern bool ScreenToClient(IntPtr hWnd, ref POINT lpPoint); " +
         "[DllImport(\"user32.dll\")] public static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect); " +
@@ -75,9 +77,11 @@ function hbBuildCs() {
         // not stop the game, otherwise a player who switched to another app for
         // a minute comes back to a frozen window.
         "uint winPid = 0, fgPid = 0; " +
-        "GetWindowThreadProcessId(hwnd, out winPid); " +
+        "uint tid = GetWindowThreadProcessId(hwnd, out winPid); " +
         "GetWindowThreadProcessId(GetForegroundWindow(), out fgPid); " +
         "bool isForeground = (winPid == 0 || fgPid == 0 || winPid == fgPid); " +
+        "GUITHREADINFO gti = new GUITHREADINFO(); gti.cbSize = Marshal.SizeOf(typeof(GUITHREADINFO)); " +
+        "IntPtr focusHwnd = GetGUIThreadInfo(tid, ref gti) ? gti.hwndFocus : IntPtr.Zero; " +
 
         // The game canvas is the only child taller than 200 px: use its screen
         // rectangle as the play area instead of hard-coded layout offsets.
@@ -93,25 +97,32 @@ function hbBuildCs() {
         // pulse must never move the pointer while the user works elsewhere.
         "if (inPlayArea && isForeground) { mouse_event(0x0001, 0, (toggle == 0) ? 1 : -1, 0, UIntPtr.Zero); } " +
 
+        // Alternate fallback coords (0,2) <-> (1,3) so Windows/ScriptUI never drops
+        // identical WM_MOUSEMOVE messages while keeping clientY <= 3 and clientX <= 1.
         "POINT cpt = pt; ScreenToClient(hwnd, ref cpt); " +
-        "int mx = inPlayArea ? cpt.X : 0; " +
-        "int my = inPlayArea ? cpt.Y : 2; " +
+        "int mx = inPlayArea ? cpt.X : toggle; " +
+        "int my = inPlayArea ? cpt.Y : (2 + toggle); " +
         "int lp = (my << 16) | (mx & 0xFFFF); " +
         "PostMessage(hwnd, 0x0200, IntPtr.Zero, (IntPtr)lp); " +
         "PostMessage(hwnd, 0x0100, (IntPtr)0x7E, IntPtr.Zero); " +
 
+        "bool hitFocus = false; " +
         "EnumChildWindows(hwnd, (ch, l) => { " +
         "RECT r; if (GetClientRect(ch, out r)) { " +
         "int h = r.Bottom - r.Top; " +
         "if (h > 200) { " +
         "POINT p2 = pt; ScreenToClient(ch, ref p2); " +
         "bool inCv = (p2.X >= 0 && p2.X <= r.Right && p2.Y >= 10 && p2.Y <= r.Bottom); " +
-        "int cx = inCv ? p2.X : 0; " +
-        "int cy = inCv ? p2.Y : 2; " +
+        "int cx = inCv ? p2.X : toggle; " +
+        "int cy = inCv ? p2.Y : (2 + toggle); " +
         "PostMessage(ch, 0x0200, IntPtr.Zero, (IntPtr)((cy << 16) | (cx & 0xFFFF))); " +
-        "} else if (h >= 20 && h <= 32) { " +
+        "} else if (h >= 20 && h <= 40) { " +
+        "if (ch == focusHwnd) hitFocus = true; " +
         "PostMessage(ch, 0x0100, (IntPtr)0x7E, IntPtr.Zero); " +
         "} } return true; }, IntPtr.Zero); " +
+        "if (!hitFocus && focusHwnd != IntPtr.Zero && focusHwnd != hwnd) { " +
+        "PostMessage(focusHwnd, 0x0100, (IntPtr)0x7E, IntPtr.Zero); " +
+        "} " +
         "} }";
 }
 

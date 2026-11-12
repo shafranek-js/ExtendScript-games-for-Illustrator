@@ -1,12 +1,12 @@
 ﻿#target illustrator
 // PLAY ARCADE - standalone build.
-// One window for all eight games. Runs modular or standalone builds from anywhere.
+// One window for all nine games. Runs modular or standalone builds from anywhere.
 
 
 /**
  * RELAX - Arcade Launcher for Adobe Illustrator (ExtendScript / ScriptUI)
  *
- * One window for all eight games in this folder. Click a title or press 1-8.
+ * One window for all nine games in this folder. Click a title or press 1-9.
  * When a game window is closed the launcher comes back, so you can play the
  * next one without touching File > Scripts again.
  *
@@ -34,7 +34,10 @@
         { file: "SpaceInvaders.jsx", token: "SpaceInvaders", title: "Space Invaders", tag: "SHOOTER", desc: "5x9 swarm, bunkers, UFO" },
         { file: "BoulderDash.jsx", token: "BoulderDash", title: "Boulder Dash", tag: "LOGIC", desc: "Caves, boulders, diamonds" },
         { file: "PacMan.jsx", token: "PacMan", title: "Pac-Man", tag: "ARCADE", desc: "Maze and 4 ghosts" },
-        { file: "LodeRunner.jsx", token: "LodeRunner", title: "Lode Runner", tag: "ARCADE", desc: "150 levels, digging, guards" }
+        { file: "LodeRunner.jsx", token: "LodeRunner", title: "Lode Runner", tag: "ARCADE", desc: "150 levels, digging, guards" },
+        { file: "Xonix.jsx", token: "Xonix", title: "Xonix", tag: "ARCADE", desc: "Flood-fill territory capture" },
+        { file: "Bomberman.jsx", token: "Bomberman", title: "Bomberman", tag: "ACTION", desc: "15x13 maze, bombs, powerups" },
+        { file: "BattleCity.jsx", token: "BattleCity", title: "Battle City", tag: "ACTION", desc: "26x26 tanks, Eagle HQ, 8 maps" }
     ];
 
     // ---------------------------------------------------------------- paths
@@ -231,7 +234,7 @@
         win.alignChildren = ["fill", "top"];
         win.spacing = 5;
         win.margins = 14;
-        win.preferredSize = [470, 400];
+        win.preferredSize = [470, 500];
 
         var g = win.graphics;
         g.backgroundColor = g.newBrush(g.BrushType.SOLID_COLOR, norm(BG_RGB));
@@ -244,7 +247,7 @@
         var titleFont = makeFont(22, "BOLD");
         if (titleFont) title.graphics.font = titleFont;
 
-        var sub = win.add("statictext", undefined, "Eight games inside Illustrator - click a title or press 1-8");
+        var sub = win.add("statictext", undefined, "Eleven games inside Illustrator - click a title or press 1-9, 0, A");
         sub.graphics.foregroundColor = mutedPen;
         win.add("panel").preferredSize = [440, 1];
 
@@ -252,14 +255,16 @@
 
         for (var i = 0; i < GAMES.length; i++) {
             var game = GAMES[i];
-            var exists = new File(gamePath(game)).exists;
+            var standalonePath = BASE_DIR + "/" + game.file.replace(/\.jsx$/i, "") + "_standalone.jsx";
+            var exists = (new File(gamePath(game)).exists) || (new File(standalonePath).exists);
 
             var row = win.add("group");
             row.orientation = "row";
             row.alignChildren = ["left", "center"];
             row.spacing = 8;
 
-            var key = row.add("statictext", undefined, String(i + 1));
+            var keyLabel = (i === 9) ? "0" : (i === 10 ? "A" : String(i + 1));
+            var key = row.add("statictext", undefined, keyLabel);
             key.preferredSize = [14, 20];
             key.graphics.foregroundColor = exists ? accentPen : mutedPen;
 
@@ -372,7 +377,19 @@
         var onKey = function (ev) {
             var name = String(ev.keyName || "");
             var digit = parseInt(name, 10);
-            if (digit >= 1 && digit <= GAMES.length) {
+            if (name.toUpperCase() === "A" && GAMES.length >= 11) {
+                ev.preventDefault();
+                chosen = 10;
+                win.close();
+                return;
+            }
+            if (name === "0" && GAMES.length >= 10) {
+                ev.preventDefault();
+                chosen = 9;
+                win.close();
+                return;
+            }
+            if (digit >= 1 && digit <= 9 && digit <= GAMES.length) {
                 ev.preventDefault();
                 chosen = digit - 1;
                 win.close();
