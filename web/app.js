@@ -21,12 +21,12 @@ function fitFullscreenGame() {
     const toolbar = fullscreen.parentElement;
     const stageStyle = getComputedStyle(stage);
     const displayedHeight = boards.reduce((height, board) => height + board.getBoundingClientRect().height, 0);
-    const boardHeight = boards.reduce((height, board) => height + board.height, 0);
+    const boardHeight = boards.reduce((height, board) => height + Number(board.dataset.logicalHeight), 0);
     const controlsHeight = dialog.getBoundingClientRect().height - displayedHeight;
     const availableHeight = stage.clientHeight - parseFloat(stageStyle.paddingTop) - parseFloat(stageStyle.paddingBottom)
         - toolbar.getBoundingClientRect().height - parseFloat(getComputedStyle(toolbar).marginBottom) - controlsHeight;
     for (const board of boards) {
-        const width = Math.max(1, Math.floor(availableHeight * board.width / boardHeight));
+        const width = Math.max(1, Math.floor(availableHeight * Number(board.dataset.logicalWidth) / boardHeight));
         board.style.setProperty("--fullscreen-board-width", width + "px");
     }
 }

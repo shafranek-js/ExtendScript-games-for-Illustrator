@@ -43,6 +43,19 @@ export function createHost(root, returnToCatalog) {
     let dialog;
     let closed = false;
     const pressed = new Map();
+    const canvasPainters = new Map();
+    const canvasLayout = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+            const canvas = entry.target;
+            const { width: cssWidth, height: cssHeight } = entry.contentRect;
+            const width = Math.max(1, Math.round(cssWidth * window.devicePixelRatio));
+            const height = Math.max(1, Math.round(cssHeight * window.devicePixelRatio));
+            if (canvas.width === width && canvas.height === height) continue;
+            canvas.width = width;
+            canvas.height = height;
+            canvasPainters.get(canvas)?.();
+        }
+    });
 
     function stopHeartbeat() {
         clearInterval(timer);
@@ -56,6 +69,8 @@ export function createHost(root, returnToCatalog) {
             dialog?.onClose?.();
         } finally {
             stopHeartbeat();
+            canvasLayout.disconnect();
+            canvasPainters.clear();
             lifetime.abort();
         }
     }
@@ -131,7 +146,10 @@ export function createHost(root, returnToCatalog) {
             notify(name) {
                 if (name !== "onDraw" || !draw) return;
                 const ctx = node.getContext("2d");
+                const [width, height] = item.preferredSize;
+                ctx.resetTransform();
                 ctx.clearRect(0, 0, node.width, node.height);
+                ctx.scale(node.width / width, node.height / height);
                 draw.call(item);
             },
             mount() {
@@ -139,6 +157,16 @@ export function createHost(root, returnToCatalog) {
                     const [width, height] = item.preferredSize;
                     node.width = width;
                     node.height = height;
+                    node.dataset.logicalWidth = width;
+                    node.dataset.logicalHeight = height;
+                    node.style.aspectRatio = width + " / " + height;
+                    node.style.setProperty("--board-width", width + "px");
+                    canvasPainters.set(node, () => item.notify("onDraw"));
+                    if ("devicePixelContentBoxSize" in ResizeObserverEntry.prototype) {
+                        canvasLayout.observe(node, { box: "device-pixel-content-box" });
+                    } else {
+                        canvasLayout.observe(node);
+                    }
                 } else if (type === "dialog" || type === "group") {
                     node.dataset.orientation = item.orientation || "column";
                     if (typeof item.spacing === "number") node.style.gap = item.spacing + "px";
@@ -170,8 +198,8 @@ export function createHost(root, returnToCatalog) {
                             node.setPointerCapture(event.pointerId);
                         }
                         const bounds = node.getBoundingClientRect();
-                        const scaleX = draw ? node.width / bounds.width : 1;
-                        const scaleY = draw ? node.height / bounds.height : 1;
+                        const scaleX = draw ? item.preferredSize[0] / bounds.width : 1;
+                        const scaleY = draw ? item.preferredSize[1] / bounds.height : 1;
                         item.dispatch(name, {
                             clientX: (event.clientX - bounds.left) * scaleX,
                             clientY: (event.clientY - bounds.top) * scaleY,
