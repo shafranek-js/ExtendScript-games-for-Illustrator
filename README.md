@@ -53,7 +53,7 @@ The launcher is the entry point: one window with all eleven games, hotkeys `1`�
 
 Running a single game directly works too: `File > Scripts > Other Script…` → e.g. `Tetris.jsx`, `Xonix.jsx`, `Bomberman.jsx` or `BattleCity.jsx`.
 
-**Standalone single-file builds:** Every game is also available as a self-contained bundle (`*_standalone.jsx`, e.g. `Tetris_standalone.jsx`, `Xonix_standalone.jsx`, `BattleCity_standalone.jsx`). All `lib/` code is inlined, so each standalone file can be moved anywhere or shared with colleagues without keeping the repository or `lib/` folder next to it.
+**Standalone single-file builds (zero dependencies):** Want just a single game of your choice without keeping the repository or `lib/` folder? Grab its `<Game>_standalone.jsx` directly from the [`standalone/`](standalone/) folder (e.g. `standalone/Tetris_standalone.jsx`, `standalone/Bomberman_standalone.jsx`, `standalone/BattleCity_standalone.jsx`) and run it via `File > Scripts > Other Script…` from anywhere — all `lib/` code is inlined inside each file.
 
 **Controls:** arrows / WASD to move, `Space` for the primary action (`Z` / `X` to dig left / right in Lode Runner, bomb in Bomberman, fire in Battle City), `Esc` to close. Mouse steers in Arkanoid and Space Invaders; swipes and clicks work in 2048, Snake, Boulder Dash and Tetris.
 
@@ -69,10 +69,10 @@ The full engineering notes — including the platform traps that shaped this cod
 ## Repository layout
 
 ```
-Play Arcade.jsx        launcher: menu for all 11 games (1-9, 0, A, Random, Docs, Logs)
+Play Arcade.jsx             launcher: menu for all 11 games (1-9, 0, A, Random, Docs, Logs)
 2048.jsx … BattleCity.jsx  eleven modular games (require lib/)
-*_standalone.jsx       eleven standalone single-file builds (zero dependencies)
-lib/                   shared engine: drawing core, heartbeat, animation, persistence, i18n, diagnostics
+standalone/                self-contained single-file builds (*_standalone.jsx, zero dependencies)
+lib/                       shared engine: drawing core, heartbeat, animation, persistence, i18n, diagnostics
 tools/                 static gate, core tests, headless logic/render tests, level importer, standalone builder
 screenshots/           UI captures used in this README
 README.md              this file
@@ -92,7 +92,7 @@ node tools/loderunner-headless.js # 37 headless tests for Lode Runner mechanics 
 node tools/xonix-headless.js      # 12 headless tests for Xonix flood-fill, patrols & vector rendering
 node tools/bomberman-headless.js  # 12 headless tests for Bomberman blasts, powerups, foes & portal
 node tools/battlecity-headless.js # 11 headless tests for Battle City terrain, HQ, upgrades & tanks
-node tools/make-standalone.js --all # rebuild all 11 standalone single-file bundles
+node tools/make-standalone.js --all # rebuild all standalone single-file bundles in standalone/
 ```
 
 Both run on Node alone — Illustrator is not required. The runtime test is manual: see [TESTING.md](TESTING.md) (Smoke run ≈ 25 min, Full run ≈ 2.5 h).

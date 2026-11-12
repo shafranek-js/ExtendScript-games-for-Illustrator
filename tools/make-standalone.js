@@ -3,13 +3,15 @@
 //   node tools/make-standalone.js [Game.jsx | --all]
 //
 // Every #include is replaced with the file's contents (each file once), so the
-// result runs from anywhere without lib/ next to it. Output: <name>_standalone.jsx
+// result runs from anywhere without lib/ next to it.
+// Output: standalone/<name>_standalone.jsx
 // Edit the source game and rebuild - never edit the generated file.
 
 const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
+const STANDALONE_DIR = path.join(ROOT, "standalone");
 
 const ALL_GAMES = [
     "2048.jsx",
@@ -22,7 +24,8 @@ const ALL_GAMES = [
     "LodeRunner.jsx",
     "Xonix.jsx",
     "Bomberman.jsx",
-    "BattleCity.jsx"
+    "BattleCity.jsx",
+    "Play Arcade.jsx"
 ];
 
 function buildStandalone(file) {
@@ -32,7 +35,8 @@ function buildStandalone(file) {
         return false;
     }
 
-    const OUT = path.join(ROOT, file.replace(/\.jsx$/i, "") + "_standalone.jsx");
+    fs.mkdirSync(STANDALONE_DIR, { recursive: true });
+    const OUT = path.join(STANDALONE_DIR, path.basename(file).replace(/\.jsx$/i, "") + "_standalone.jsx");
     const seen = new Set();
 
     function inline(relPath) {
@@ -75,7 +79,7 @@ function buildStandalone(file) {
     fs.writeFileSync(OUT, (needsBom ? "\uFEFF" : "") + result, "utf8");
 
     const bytes = Buffer.from(result, "utf8");
-    console.log("wrote " + path.basename(OUT));
+    console.log("wrote " + path.relative(ROOT, OUT).replace(/\\/g, "/"));
     console.log("  lines     " + result.split("\n").length);
     console.log("  bytes     " + bytes.length);
     console.log("  non-ASCII " + bytes.filter((b) => b > 127).length);
@@ -87,7 +91,7 @@ function buildStandalone(file) {
 const arg = process.argv[2];
 
 if (!arg || arg === "--all") {
-    console.log("Building standalone bundles for all " + ALL_GAMES.length + " games...\n");
+    console.log("Building standalone bundles into standalone/ (" + ALL_GAMES.length + " scripts)...\n");
     for (const g of ALL_GAMES) {
         buildStandalone(g);
         console.log("");

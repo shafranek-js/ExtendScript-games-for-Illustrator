@@ -54,6 +54,27 @@
         return BASE_DIR + "/" + game.file;
     }
 
+    function standaloneName(game) {
+        return game.file.replace(/\.jsx$/i, "") + "_standalone.jsx";
+    }
+
+    function standalonePath(game) {
+        var name = standaloneName(game);
+        var sub = BASE_DIR + "/standalone/" + name;
+        if (new File(sub).exists) return sub;
+        return BASE_DIR + "/" + name;
+    }
+
+    function evalStandalone(path, game) {
+        try {
+            $.evalFile(path);
+        } catch (err) {
+            var msg = (err && err.message) ? err.message : String(err);
+            var line = (err && err.line) ? " (line " + err.line + ")" : "";
+            alert("Error in " + standaloneName(game) + line + ":\n\n" + msg);
+        }
+    }
+
     // ------------------------------------------------------------ file i/o
 
     function readTextFile(path) {
@@ -142,30 +163,19 @@
     function runGame(game) {
         MISSING.length = 0;
         var gameFile = gamePath(game);
-        var standaloneFile = BASE_DIR + "/" + game.file.replace(/\.jsx$/i, "") + "_standalone.jsx";
+        var standaloneFile = standalonePath(game);
 
         // If modular game or lib/ is missing, check if standalone build is available:
         if ((!new File(gameFile).exists || !new File(BASE_DIR + "/lib/GameCore.jsx").exists) &&
             new File(standaloneFile).exists) {
-            try {
-                $.evalFile(standaloneFile);
-            } catch (err) {
-                var msg = (err && err.message) ? err.message : String(err);
-                var line = (err && err.line) ? " (line " + err.line + ")" : "";
-                alert("Error in " + game.file.replace(/\.jsx$/i, "") + "_standalone.jsx" + line + ":\n\n" + msg);
-            }
+            evalStandalone(standaloneFile, game);
             return;
         }
 
         var source = bundleSource(gameFile, 0);
         if (source === null) {
             if (new File(standaloneFile).exists) {
-                try {
-                    $.evalFile(standaloneFile);
-                } catch (err2) {
-                    var msg2 = (err2 && err2.message) ? err2.message : String(err2);
-                    alert("Error in " + game.file.replace(/\.jsx$/i, "") + "_standalone.jsx:\n\n" + msg2);
-                }
+                evalStandalone(standaloneFile, game);
                 return;
             }
             alert("Cannot read " + game.file + "\n\nExpected next to this launcher:\n" + BASE_DIR);
@@ -173,12 +183,7 @@
         }
         if (MISSING.length) {
             if (new File(standaloneFile).exists) {
-                try {
-                    $.evalFile(standaloneFile);
-                } catch (err3) {
-                    var msg3 = (err3 && err3.message) ? err3.message : String(err3);
-                    alert("Error in " + game.file.replace(/\.jsx$/i, "") + "_standalone.jsx:\n\n" + msg3);
-                }
+                evalStandalone(standaloneFile, game);
                 return;
             }
             alert("Missing #include file(s):\n  " + MISSING.join("\n  ") +
@@ -252,8 +257,7 @@
 
         for (var i = 0; i < GAMES.length; i++) {
             var game = GAMES[i];
-            var standalonePath = BASE_DIR + "/" + game.file.replace(/\.jsx$/i, "") + "_standalone.jsx";
-            var exists = (new File(gamePath(game)).exists) || (new File(standalonePath).exists);
+            var exists = (new File(gamePath(game)).exists) || (new File(standalonePath(game)).exists);
 
             var row = win.add("group");
             row.orientation = "row";
@@ -344,6 +348,7 @@
 
         ui.btnDocs.onClick = function () {
             var doc = new File(BASE_DIR + "/README.md");
+            if (!doc.exists) doc = new File(BASE_DIR + "/../README.md");
             if (doc.exists) {
                 doc.execute();
             } else {
@@ -410,7 +415,7 @@
         return;
     }
     var hasLib = (new File(BASE_DIR + "/lib/GameCore.jsx")).exists;
-    var hasStandalone = (new File(BASE_DIR + "/2048_standalone.jsx")).exists;
+    var hasStandalone = GAMES.length > 0 && (new File(standalonePath(GAMES[0]))).exists;
     if (!hasLib && !hasStandalone) {
         alert("The lib/ folder was not found next to this launcher.\n\n" +
               "Copy the whole relax folder, not a single .jsx file.");

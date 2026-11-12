@@ -32,6 +32,7 @@ const vm = require("vm");
 
 const ROOT = path.resolve(__dirname, "..");
 const LIB = path.join(ROOT, "lib");
+const STANDALONE = path.join(ROOT, "standalone");
 const SKIP_DIRS = new Set(["_baseline_20261107", "tools", "node_modules"]);
 
 const BANNED = [
@@ -289,7 +290,7 @@ function listJsx(dir) {
 
 function main() {
     const libs = listJsx(LIB);
-    const games = listJsx(ROOT).filter((f) => {
+    const games = listJsx(ROOT).concat(listJsx(STANDALONE)).filter((f) => {
         const dir = path.basename(path.dirname(f));
         return !SKIP_DIRS.has(dir);
     });
