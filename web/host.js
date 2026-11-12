@@ -58,8 +58,10 @@ export function createHost(root, returnToCatalog) {
     });
 
     function stopHeartbeat() {
-        clearInterval(timer);
-        timer = null;
+        if (timer !== null) {
+            cancelAnimationFrame(timer);
+            timer = null;
+        }
     }
 
     function dispose() {
@@ -256,9 +258,10 @@ export function createHost(root, returnToCatalog) {
                 stopPropagation: noop
             });
         },
-        heartbeatStart(config) {
+        heartbeatStart() {
             stopHeartbeat();
-            timer = setInterval(() => {
+            const tick = () => {
+                if (closed) return;
                 dialog.dispatch("keydown", {
                     keyName: "F15",
                     target: dialog,
@@ -266,7 +269,11 @@ export function createHost(root, returnToCatalog) {
                     preventDefault: noop,
                     stopPropagation: noop
                 });
-            }, config.tickMs || 35);
+                if (!closed && timer !== null) {
+                    timer = requestAnimationFrame(tick);
+                }
+            };
+            timer = requestAnimationFrame(tick);
             return true;
         },
         heartbeatStop: stopHeartbeat,

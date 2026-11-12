@@ -2820,4 +2820,3 @@ function perfClose() {
         finalizeClose();
     }
 })();
-

@@ -440,4 +440,3 @@
         runGame(GAMES[index]);
     }
 })();
-

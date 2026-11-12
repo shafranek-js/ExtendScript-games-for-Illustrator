@@ -178,6 +178,8 @@
     var keepPlaying = false;
     var gameOver = false;
     var undoStack = [];
+    var animState = null;
+    var animRafId = null;
     var statusKey = "statusReady";
     var statusArgs = [];
 
@@ -352,7 +354,51 @@
         return false;
     }
 
+    function stopBoardAnim() {
+        animState = null;
+        if (animRafId !== null && typeof cancelAnimationFrame === "function") {
+            cancelAnimationFrame(animRafId);
+            animRafId = null;
+        }
+    }
+
+    function stepBoardAnim() {
+        animRafId = null;
+        if (!animState || !animState.active) return;
+        try {
+            boardCanvas.notify("onDraw");
+        } catch (e) {}
+        if (animState && animState.active && typeof requestAnimationFrame === "function") {
+            animRafId = requestAnimationFrame(stepBoardAnim);
+        }
+    }
+
+    function startBoardAnim(slides, merges, spawnTile) {
+        if (typeof requestAnimationFrame !== "function") {
+            animState = null;
+            return;
+        }
+        stopBoardAnim();
+        animState = {
+            active: true,
+            startMs: perfNow(),
+            duration: 155,
+            slides: slides,
+            merges: merges,
+            spawn: spawnTile
+        };
+        animRafId = requestAnimationFrame(stepBoardAnim);
+    }
+
+    function lineToGridCoord(direction, i, k) {
+        if (direction === "left")  return { r: i, c: k };
+        if (direction === "right") return { r: i, c: GRID_SIZE - 1 - k };
+        if (direction === "up")    return { r: k, c: i };
+        return { r: GRID_SIZE - 1 - k, c: i };
+    }
+
     function startNewGame() {
+        stopBoardAnim();
         grid = createEmptyGrid();
         mergedMask = createEmptyGrid();
         score = 0;
@@ -374,6 +420,7 @@
             setStatus("statusNoUndo");
             return false;
         }
+        stopBoardAnim();
         var prev = undoStack.pop();
         grid = prev.grid;
         score = prev.score;
@@ -392,26 +439,30 @@
     function slideAndMergeLine(line) {
         var filtered = [];
         for (var i = 0; i < GRID_SIZE; i++) {
-            if (line[i] !== 0) filtered.push(line[i]);
+            if (line[i] !== 0) filtered.push({ pos: i, val: line[i] });
         }
 
         var result = [];
         var mergedIndices = [0, 0, 0, 0];
+        var moves = [];
         var gainedScore = 0;
         var reached2048 = false;
 
         var idx = 0;
         while (idx < filtered.length) {
-            if (idx + 1 < filtered.length && filtered[idx] === filtered[idx + 1]) {
-                var mergedVal = filtered[idx] * 2;
-                var targetPos = result.length;
+            var targetPos = result.length;
+            if (idx + 1 < filtered.length && filtered[idx].val === filtered[idx + 1].val) {
+                var mergedVal = filtered[idx].val * 2;
                 result.push(mergedVal);
                 mergedIndices[targetPos] = 1;
+                moves.push({ fromPos: filtered[idx].pos, toPos: targetPos, val: filtered[idx].val, mergedInto: true });
+                moves.push({ fromPos: filtered[idx + 1].pos, toPos: targetPos, val: filtered[idx + 1].val, mergedInto: true });
                 gainedScore += mergedVal;
                 if (mergedVal === 2048) reached2048 = true;
                 idx += 2;
             } else {
-                result.push(filtered[idx]);
+                result.push(filtered[idx].val);
+                moves.push({ fromPos: filtered[idx].pos, toPos: targetPos, val: filtered[idx].val, mergedInto: false });
                 idx += 1;
             }
         }
@@ -431,6 +482,7 @@
         return {
             line: result,
             merged: mergedIndices,
+            moves: moves,
             gained: gainedScore,
             moved: moved,
             reached2048: reached2048
@@ -449,6 +501,8 @@
         var prevGrid = cloneGrid(grid);
         var newGrid = createEmptyGrid();
         var newMerged = createEmptyGrid();
+        var slides = [];
+        var merges = [];
         var totalMoved = false;
         var totalGained = 0;
         var hit2048 = false;
@@ -456,10 +510,8 @@
         for (var i = 0; i < GRID_SIZE; i++) {
             var line = [];
             for (var j = 0; j < GRID_SIZE; j++) {
-                if (direction === "left")  line.push(grid[i][j]);
-                if (direction === "right") line.push(grid[i][GRID_SIZE - 1 - j]);
-                if (direction === "up")    line.push(grid[j][i]);
-                if (direction === "down")  line.push(grid[GRID_SIZE - 1 - j][i]);
+                var sc = lineToGridCoord(direction, i, j);
+                line.push(grid[sc.r][sc.c]);
             }
 
             var res = slideAndMergeLine(line);
@@ -468,19 +520,25 @@
             if (res.reached2048) hit2048 = true;
 
             for (var k = 0; k < GRID_SIZE; k++) {
-                if (direction === "left") {
-                    newGrid[i][k] = res.line[k];
-                    newMerged[i][k] = res.merged[k];
-                } else if (direction === "right") {
-                    newGrid[i][GRID_SIZE - 1 - k] = res.line[k];
-                    newMerged[i][GRID_SIZE - 1 - k] = res.merged[k];
-                } else if (direction === "up") {
-                    newGrid[k][i] = res.line[k];
-                    newMerged[k][i] = res.merged[k];
-                } else if (direction === "down") {
-                    newGrid[GRID_SIZE - 1 - k][i] = res.line[k];
-                    newMerged[GRID_SIZE - 1 - k][i] = res.merged[k];
+                var tc = lineToGridCoord(direction, i, k);
+                newGrid[tc.r][tc.c] = res.line[k];
+                newMerged[tc.r][tc.c] = res.merged[k];
+                if (res.merged[k] === 1) {
+                    merges.push({ r: tc.r, c: tc.c, val: res.line[k] });
                 }
+            }
+            for (var m = 0; m < res.moves.length; m++) {
+                var mv = res.moves[m];
+                var fromRc = lineToGridCoord(direction, i, mv.fromPos);
+                var toRc = lineToGridCoord(direction, i, mv.toPos);
+                slides.push({
+                    fromR: fromRc.r,
+                    fromC: fromRc.c,
+                    toR: toRc.r,
+                    toC: toRc.c,
+                    val: mv.val,
+                    mergedInto: mv.mergedInto
+                });
             }
         }
 
@@ -507,6 +565,8 @@
         movesCount += 1;
 
         spawnRandomTile();
+        var spawnInfo = lastSpawn ? { r: lastSpawn.r, c: lastSpawn.c, val: grid[lastSpawn.r][lastSpawn.c] } : null;
+        startBoardAnim(slides, merges, spawnInfo);
 
         if (hit2048 && !gameWon) {
             gameWon = true;
@@ -674,6 +734,38 @@
 
     // ==================== CUSTOM 4x4 BOARD & PROGRESS BAR RENDERING ====================
 
+    function drawTileBox(g, x, y, scale, val, isSpawn, isMerged, topHighlightBrush) {
+        var s = CELL_SIZE * scale;
+        var cx = x + CELL_SIZE / 2;
+        var cy = y + CELL_SIZE / 2;
+        var tx = cx - s / 2;
+        var ty = cy - s / 2;
+        var rad = CORNER_RADIUS * scale;
+        var lip = Math.max(1, 3 * scale);
+        var style = getTileStyle(val);
+        var lipBrush = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(style.lip, 1));
+        var tileBrush = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(style.bg, 1));
+
+        // 3D Bottom Lip + Tile Face + Top Specular Strip
+        fillRoundRect(g, tx, ty, s, s, rad, lipBrush);
+        fillRoundRect(g, tx, ty, s, Math.max(2, s - lip), rad, tileBrush);
+        if (s > 16) {
+            fillRoundRect(g, tx + 5 * scale, ty + 2 * scale, s - 10 * scale, Math.max(1.5, 3 * scale), 1.5 * scale, topHighlightBrush);
+        }
+
+        if (isSpawn) {
+            var newPen = g.newPen(g.PenType.SOLID_COLOR, rgbToNorm(PALETTE.newBorder, 1), 2.5);
+            strokeRoundRect(g, tx + 1.5, ty + 1.5, s - 3, Math.max(2, s - lip - 1.5), rad, newPen);
+            var dotBrush = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(PALETTE.newBorder, 1));
+            fillRoundRect(g, tx + s - 12 * scale, ty + 6 * scale, 6 * scale, 6 * scale, 3 * scale, dotBrush);
+        } else if (isMerged) {
+            var mergePen = g.newPen(g.PenType.SOLID_COLOR, rgbToNorm(PALETTE.mergeBorder, 0.95), 2.5);
+            strokeRoundRect(g, tx + 2, ty + 2, s - 4, Math.max(2, s - lip - 2), rad, mergePen);
+        }
+
+        drawVectorNumber(g, val, cx, cy - lip * 0.5, style.h * scale, style.fg, 1);
+    }
+
     function drawBoard(g) {
         // 1. Board outer 3D shadow + main container
         var shadowBrush = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(PALETTE.boardShadow, 1));
@@ -684,44 +776,65 @@
         var emptyShadowBrush = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(PALETTE.emptyInner, 1));
         var emptyBrush = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(PALETTE.emptyCell, 1));
         var topHighlightBrush = g.newBrush(g.BrushType.SOLID_COLOR, [1, 1, 1, 0.24]);
+        var r, c, x, y, val;
 
-        // 2. Grid cells & 3D tactile tiles
-        for (var r = 0; r < GRID_SIZE; r++) {
-            for (var c = 0; c < GRID_SIZE; c++) {
-                var x = CELL_GAP + c * (CELL_SIZE + CELL_GAP);
-                var y = CELL_GAP + r * (CELL_SIZE + CELL_GAP);
-                var val = grid[r][c];
+        // 2. Recessed empty slots
+        for (r = 0; r < GRID_SIZE; r++) {
+            for (c = 0; c < GRID_SIZE; c++) {
+                x = CELL_GAP + c * (CELL_SIZE + CELL_GAP);
+                y = CELL_GAP + r * (CELL_SIZE + CELL_GAP);
+                fillRoundRect(g, x, y, CELL_SIZE, CELL_SIZE, CORNER_RADIUS, emptyShadowBrush);
+                fillRoundRect(g, x, y + 2, CELL_SIZE, CELL_SIZE - 2, CORNER_RADIUS, emptyBrush);
+            }
+        }
 
-                if (val === 0) {
-                    // Recessed slot effect
-                    fillRoundRect(g, x, y, CELL_SIZE, CELL_SIZE, CORNER_RADIUS, emptyShadowBrush);
-                    fillRoundRect(g, x, y + 2, CELL_SIZE, CELL_SIZE - 2, CORNER_RADIUS, emptyBrush);
-                } else {
-                    var style = getTileStyle(val);
-                    var lipBrush = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(style.lip, 1));
-                    var tileBrush = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(style.bg, 1));
+        // 3. Active 3D tactile tiles (interpolated in browser, instant in Illustrator)
+        if (animState && animState.active) {
+            var rawT = Math.min(1, Math.max(0, (perfNow() - animState.startMs) / animState.duration));
+            var slideT = Math.min(1, rawT / 0.72);
+            var slideEase = 1 - Math.pow(1 - slideT, 3);
+            var stepSpan = CELL_SIZE + CELL_GAP;
 
-                    // 3D Bottom Lip + Tile Face + Top Specular Strip
-                    fillRoundRect(g, x, y, CELL_SIZE, CELL_SIZE, CORNER_RADIUS, lipBrush);
-                    fillRoundRect(g, x, y, CELL_SIZE, CELL_SIZE - 3, CORNER_RADIUS, tileBrush);
-                    fillRoundRect(g, x + 5, y + 2, CELL_SIZE - 10, 3, 1.5, topHighlightBrush);
+            for (var si = 0; si < animState.slides.length; si++) {
+                var sl = animState.slides[si];
+                if (sl.mergedInto && slideT >= 1) continue;
+                var ir = sl.fromR + (sl.toR - sl.fromR) * slideEase;
+                var ic = sl.fromC + (sl.toC - sl.fromC) * slideEase;
+                drawTileBox(g, CELL_GAP + ic * stepSpan, CELL_GAP + ir * stepSpan, 1, sl.val, false, false, topHighlightBrush);
+            }
 
-                    // Spawn or Merge indicator
-                    if (lastSpawn && lastSpawn.r === r && lastSpawn.c === c) {
-                        var newPen = g.newPen(g.PenType.SOLID_COLOR, rgbToNorm(PALETTE.newBorder, 1), 2.5);
-                        strokeRoundRect(g, x + 1.5, y + 1.5, CELL_SIZE - 3, CELL_SIZE - 4.5, CORNER_RADIUS, newPen);
-                        // Corner golden badge dot
-                        var dotBrush = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(PALETTE.newBorder, 1));
-                        fillRoundRect(g, x + CELL_SIZE - 12, y + 6, 6, 6, 3, dotBrush);
-                    } else if (mergedMask[r][c] === 1) {
-                        var mergePen = g.newPen(g.PenType.SOLID_COLOR, rgbToNorm(PALETTE.mergeBorder, 0.95), 2.5);
-                        strokeRoundRect(g, x + 2, y + 2, CELL_SIZE - 4, CELL_SIZE - 5, CORNER_RADIUS, mergePen);
-                    }
+            if (slideT >= 1) {
+                var popT = Math.min(1, (rawT - 0.72) / 0.28);
+                var popScale = 1 + 0.14 * Math.sin(popT * Math.PI);
+                for (var mi = 0; mi < animState.merges.length; mi++) {
+                    var mg = animState.merges[mi];
+                    drawTileBox(g, CELL_GAP + mg.c * stepSpan, CELL_GAP + mg.r * stepSpan, popScale, mg.val, false, true, topHighlightBrush);
+                }
+            }
 
-                    // Pixel-perfect centered Vector Number
-                    var centerX = x + CELL_SIZE / 2;
-                    var centerY = y + (CELL_SIZE - 3) / 2;
-                    drawVectorNumber(g, val, centerX, centerY, style.h, style.fg, 1);
+            if (animState.spawn && rawT > 0.25) {
+                var spT = Math.min(1, (rawT - 0.25) / 0.75);
+                var spScale = 0.25 + 0.75 * (1 - Math.pow(1 - spT, 3));
+                var sp = animState.spawn;
+                drawTileBox(g, CELL_GAP + sp.c * stepSpan, CELL_GAP + sp.r * stepSpan, spScale, sp.val, true, false, topHighlightBrush);
+            }
+
+            if (rawT >= 1) {
+                animState = null;
+            }
+        } else {
+            for (r = 0; r < GRID_SIZE; r++) {
+                for (c = 0; c < GRID_SIZE; c++) {
+                    val = grid[r][c];
+                    if (val === 0) continue;
+                    x = CELL_GAP + c * (CELL_SIZE + CELL_GAP);
+                    y = CELL_GAP + r * (CELL_SIZE + CELL_GAP);
+                    drawTileBox(
+                        g, x, y, 1, val,
+                        Boolean(lastSpawn && lastSpawn.r === r && lastSpawn.c === c),
+                        mergedMask[r][c] === 1,
+                        topHighlightBrush
+                    );
                 }
             }
         }
@@ -1118,6 +1231,7 @@
     };
 
     btnClose.onClick = function () {
+        stopBoardAnim();
         saveStateToDisk();
         win.close();
     };
@@ -1213,6 +1327,7 @@
     };
 
     win.onClose = function () {
+        stopBoardAnim();
         perfClose();
     };
 

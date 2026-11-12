@@ -1679,7 +1679,7 @@
             if (ev && ev.preventDefault) ev.preventDefault();
             if (ev && ev.stopPropagation) ev.stopPropagation();
             walkQueue = [];
-            tryMove(d.dx, d.dy, false);
+            tryMove(d.dx, d.dy, false, typeof requestAnimationFrame === "function");
             finishKeyRefresh(k);
             return;
         }

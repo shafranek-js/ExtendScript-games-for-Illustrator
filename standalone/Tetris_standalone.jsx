@@ -716,9 +716,11 @@ function animLerp(prev, cur) {
 }
 
 // Paint throttle: true when at least minMs have passed since the last paint.
+// In browsers (requestAnimationFrame present), allow ~60+ fps interpolation.
 function animDue(minMs) {
     var now = new Date().getTime();
-    if (now - _animLastDraw < minMs) return false;
+    var limit = (typeof requestAnimationFrame === "function" && minMs > 14) ? 14 : minMs;
+    if (now - _animLastDraw < limit) return false;
     _animLastDraw = now;
     return true;
 }
@@ -2145,4 +2147,3 @@ function animResetDrawClock() {
     win.show();
     heartbeatStop();
 })();
-

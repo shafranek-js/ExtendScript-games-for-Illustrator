@@ -2960,4 +2960,3 @@ function perfClose() {
         finalizeClose();
     }
 })();
-

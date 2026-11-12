@@ -2031,4 +2031,3 @@ function perfClose() {
     win.show();
     heartbeatStop();
 })();
-

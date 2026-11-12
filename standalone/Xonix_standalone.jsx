@@ -2658,4 +2658,3 @@ function perfClose() {
         finalizeClose();
     }
 })();
-

@@ -3684,8 +3684,6 @@
 
     function updateFall(dt) {
         if (!player.falling) return;
-        player.fallT += dt;
-        if (player.fallT < FALL_MS) return;
         player.fallT = 0;
 
         var below = player.cy + 1;
@@ -3711,7 +3709,8 @@
         }
 
         player.cy = below;
-        player.fromY = (player.cy - 1) * TILE;
+        player.fromX = player.px;
+        player.fromY = player.py;
         player.moving = true;
         player.moveT = 0;
     }
@@ -3746,6 +3745,7 @@
                 player.px = player.cx * TILE;
                 player.py = player.cy * TILE;
                 finishMove();
+                if (player.falling && !player.moving) updateFall(0);
             } else {
                 var toX = player.cx * TILE, toY = player.cy * TILE;
                 player.px = player.fromX + (toX - player.fromX) * player.moveT;
@@ -4291,113 +4291,269 @@
 
     // 10x11 authentic Apple II arcade sprite matrices (scaled 2x to 20x22 in 24x24 tile):
     // C: Cyan cap, W: White body/limbs, O: Orange guard body, R: Red hat (guard with gold)
-    var RUNNER_FRAMES = {
-        run0:    ["      C   ","     WWW  ","     WWW  ","    WWW   ","  WW WWW  "," WW WW  WW","    WW    ","    WWW   "," WWWW WW  ","      WW  ","      WW  "],
-        run1:    ["      C   ","     WWW  ","     WWW  ","     WW   ","    WWW   ","   WWWWW  ","   WWWW WW","     WWW  ","    WWWW  ","   WWW    ","    WW    "],
-        run2:    ["      C   ","     WWW  ","     WWW  ","     WW   ","   WWWW W ","  WW WWWW ","     WW   ","    WWWW  ","   WW  WW ","  WW   WW ","  WW      "],
-        ladder0: ["     WW   "," W   WW   "," WWWWWW   ","    WWW  W","    WWWWWW","    WWW   ","    WWW   ","   WW WW  ","  WWW WW  ","      WW  ","      WWW "],
-        ladder1: ["    WW    ","    WW   W","    WWWWWW"," W  WWW   "," WWWWWW   ","    WWW   ","    WWW   ","   WW WW  ","   WW WWW ","   WW     ","  WWW     "],
-        fall:    [" WW  C  WW"," WW WWW WW"," WW WWW WW","  WWWWWWW ","    WW    ","    WW    ","    WWWW  ","    WW WW ","    WW WW ","    WW WW ","    WW    "],
-        rope0:   ["  WW    WW","  WW    WW","  WW WW WW","  WW WWWW ","   WWWW   ","    WW    ","    WW    ","  WWWW    "," WW  W    "," WW WW    "," W WW     "],
-        rope1:   ["       WW ","       WW ","     WWWW ","     WWW  ","   WWWW   ","  WW WW   ","     WW   ","    WWW   ","   WW WW  ","   WW WW  ","   WW WW  "],
-        dig:     ["   C      ","  WWW     ","  WWW     ","  WW      ","WWWWWW    ","W WW WWOO ","  WW    O ","  WWW     "," WW WW    "," WW WW    "," WW WW    "]
-    };
+    function getCharacterPose(ent, isPlayer) {
+        var dir = ent.dir >= 0 ? 1 : -1;
+        var shakeX = 0;
+        if (isPlayer && ent.digging > 0) {
+            return {
+                mode: "dig",
+                phase: ent.digging / 220,
+                dir: ent.digDir || dir,
+                shakeX: 0
+            };
+        }
+        if (ent.falling) {
+            return { mode: "fall", phase: ent.py * 0.18, dir: dir, shakeX: 0 };
+        }
+        if (!isPlayer && ent.inHole > 0) {
+            if (ent.inHole < 1000) shakeX = Math.sin(ent.inHole * 0.08) * 1.8;
+            return { mode: "fall", phase: 0, dir: dir, shakeX: shakeX };
+        }
+        var col = Math.max(0, Math.min(COLS - 1, Math.round(ent.px / TILE)));
+        var row = Math.max(0, Math.min(ROWS - 1, Math.round(ent.py / TILE)));
+        var ch = tileAt(col, row);
+        if (isLadder(ch)) {
+            return { mode: "ladder", phase: ent.py * 0.34, dir: dir, shakeX: 0 };
+        }
+        if (isRope(ch)) {
+            return { mode: "rope", phase: ent.px * 0.28, dir: dir, shakeX: 0 };
+        }
+        if (ent.moving || Math.abs(ent.px - ent.cx * TILE) > 0.5 || Math.abs(ent.py - ent.cy * TILE) > 0.5) {
+            return { mode: "run", phase: ent.px * 0.28, dir: dir, shakeX: 0 };
+        }
+        return { mode: "idle", phase: 0, dir: dir, shakeX: 0 };
+    }
 
-    var GUARD_FRAMES = {
-        run0:    ["      C   ","     OOO  ","     OOO  ","    OOO   ","  OO OOO  "," OO OO  OO","    WW    ","    WWW   "," WWWW WW  ","      WW  ","      WW  "],
-        run1:    ["      C   ","     OOO  ","     OOO  ","     OO   ","    OOO   ","   OOOOO  ","   OOWW OO","     WWW  ","    WWWW  ","   WWW    ","    WW    "],
-        run2:    ["      C   ","     OOO  ","     OOO  ","     OO   ","   OOOO O ","  OO OOOO ","     WW   ","    WWWW  ","   WW  WW ","  WW   WW ","  WW      "],
-        ladder0: ["     OO   "," O   OO   "," OOOOOO   ","    OOO  O","    OOOOOO","    OOO   ","    WWW   ","   WW WW  ","  WWW WW  ","      WW  ","      WWW "],
-        ladder1: ["    OO    ","    OO   O","    OOOOOO"," O  OOO   "," OOOOOO   ","    OOO   ","    WWW   ","   WW WW  ","   WW WWW ","   WW     ","  WWW     "],
-        fall:    [" OO  C  O "," OO OOO O "," OO OOO O ","  OOOOOOO ","    OO    ","    OO    ","    WWWW  ","    WW WW ","    WW WW ","    WW WW ","    WW    "],
-        rope0:   ["  OO    OO","  OO    OO","  OO OO OO","  OO OOOO ","   OOOO   ","    OO    ","    WW    ","  WWWW    "," WW  W    "," WW WW    "," W WW     "],
-        rope1:   ["       OO ","       OO ","     OOOO ","     OOO  ","   OOOO   ","  OO OO   ","     WW   ","    WWW   ","   WW WW  ","   WW WW  ","   WW WW  "],
-        shake0:  ["OO  C  O  ","OO OOO O  ","OO OOO O  "," OOOOOOO  ","   OO     ","   OO     ","   WWWW   ","   WW WW  ","   WW WW  ","   WW WW  ","   WW     "],
-        shake1:  ["   O  C  O","   O OOO O","   O OOO O","   OOOOOOO","     OO   ","     OO   ","     WWWW ","     WW WW","     WW WW","     WW WW","     WW   "]
-    };
+    function solveJoint(ax, ay, bx, by, l1, l2, bendX, bendY) {
+        var dx = bx - ax;
+        var dy = by - ay;
+        var d2 = dx * dx + dy * dy;
+        var dist = Math.sqrt(d2);
+        if (dist < 0.001) dist = 0.001;
+        var maxD = l1 + l2 - 0.05;
+        var minD = Math.abs(l1 - l2) + 0.05;
+        var clamped = Math.max(minD, Math.min(maxD, dist));
+        var a = (l1 * l1 - l2 * l2 + clamped * clamped) / (2 * clamped);
+        var h = Math.sqrt(Math.max(0, l1 * l1 - a * a));
+        var ux = dx / dist;
+        var uy = dy / dist;
+        var mx = ax + ux * a;
+        var my = ay + uy * a;
+        var px = -uy;
+        var py = ux;
+        if (px * bendX + py * bendY < 0) {
+            px = -px;
+            py = -py;
+        }
+        return [mx + px * h, my + py * h];
+    }
 
-    function collectSpriteRects(frame, ox, oy, flip, whiteList, orangeList, cyanList, redList, isRedCap) {
-        for (var r = 0; r < 11; r++) {
-            var row = frame[r];
-            var runChar = " ", runStart = -1, runLen = 0;
-            for (var c = 0; c <= 10; c++) {
-                var ch = " ";
-                if (c < 10) {
-                    var colIdx = flip ? (9 - c) : c;
-                    ch = row.charAt(colIdx);
-                }
-                if (ch === runChar) {
-                    runLen++;
-                } else {
-                    if (runChar !== " ") {
-                        var rx = ox + runStart * 2;
-                        var ry = oy + r * 2;
-                        var rw = runLen * 2;
-                        var rect = [rx, ry, rw, 2];
-                        if (runChar === "W") whiteList.push(rect);
-                        else if (runChar === "O") orangeList.push(rect);
-                        else if (runChar === "C") {
-                            if (isRedCap) redList.push(rect);
-                            else cyanList.push(rect);
-                        } else if (runChar === "R") redList.push(rect);
-                    }
-                    runChar = ch;
-                    runStart = c;
-                    runLen = 1;
-                }
-            }
+    function drawVectorCharacter(g, isGuard, cx, baseY, sc, dir, mode, phase, hasGold, pal) {
+        var d = dir >= 0 ? 1 : -1;
+        var s = Math.sin(phase);
+        var bob = 0;
+        var lean = 0;
+        if (mode === "run") {
+            bob = Math.abs(s) * 0.9 * sc;
+            lean = d * 1.1 * sc;
+        } else if (mode === "dig") {
+            lean = d * 1.8 * sc;
+        } else if (mode === "rope") {
+            bob = -3.8 * sc;
+            lean = d * 0.6 * sc;
+        } else if (mode === "fall") {
+            bob = 0.6 * sc;
+            lean = -d * 1.1 * sc + s * 0.5 * sc;
+        }
+
+        var footY = baseY - 1.0 * sc;
+        var hipY = baseY - 8.8 * sc - bob;
+        var waistY = baseY - 10.6 * sc - bob;
+        var shY = baseY - 14.6 * sc - bob;
+        var headY = baseY - 18.4 * sc - bob;
+
+        var hipX = cx + lean * 0.25;
+        var waistX = cx + lean * 0.6;
+        var shX = cx + lean;
+        var headX = cx + lean * 1.2;
+
+        var thighL = 4.2 * sc;
+        var shinL = 4.2 * sc;
+        var uArmL = 3.1 * sc;
+        var fArmL = 2.9 * sc;
+
+        var thighR = 1.15 * sc;
+        var shinR = 0.92 * sc;
+        var bootR = 0.95 * sc;
+        var uArmR = 0.88 * sc;
+        var fArmR = 0.74 * sc;
+        var handR = 0.82 * sc;
+        var headR = 2.45 * sc;
+
+        // Default idle pose: natural stance, arms relaxed at sides
+        var bFootX = hipX - d * 1.6 * sc;
+        var bFootY = footY;
+        var fFootX = hipX + d * 1.7 * sc;
+        var fFootY = footY;
+        var bHandX = shX - d * 1.2 * sc;
+        var bHandY = hipY + 0.6 * sc;
+        var fHandX = shX + d * 1.3 * sc;
+        var fHandY = hipY + 0.6 * sc;
+        var kneeBendX = d;
+        var kneeBendY = -0.15;
+        var elbowBendX = -d;
+        var elbowBendY = 0.2;
+
+        if (mode === "run") {
+            var stride = s * 4.5 * sc;
+            var liftB = Math.max(0, -s) * 2.8 * sc;
+            var liftF = Math.max(0, s) * 2.8 * sc;
+            bFootX = hipX - d * stride - Math.max(0, -s) * d * 1.2 * sc;
+            bFootY = footY - liftB;
+            fFootX = hipX + d * stride - Math.max(0, s) * d * 1.2 * sc;
+            fFootY = footY - liftF;
+            bHandX = shX + d * s * 3.8 * sc;
+            bHandY = waistY + 1.2 * sc - Math.max(0, s) * 1.6 * sc;
+            fHandX = shX - d * s * 3.8 * sc;
+            fHandY = waistY + 1.2 * sc - Math.max(0, -s) * 1.6 * sc;
+        } else if (mode === "ladder") {
+            var climb = s;
+            bFootX = hipX - 2.6 * sc;
+            fFootX = hipX + 2.6 * sc;
+            bFootY = footY - (0.5 + 0.5 * climb) * 3.4 * sc;
+            fFootY = footY - (0.5 - 0.5 * climb) * 3.4 * sc;
+            bHandX = shX - 4.2 * sc;
+            fHandX = shX + 4.2 * sc;
+            bHandY = shY - 1.6 * sc - climb * 3.2 * sc;
+            fHandY = shY - 1.6 * sc + climb * 3.2 * sc;
+            kneeBendX = 0;
+            kneeBendY = -1;
+            elbowBendX = 0;
+            elbowBendY = 1;
+        } else if (mode === "rope") {
+            var swing = s;
+            var ropeY = baseY - 16.0 * sc;
+            bHandX = shX + d * (-2.2 + swing * 2.0) * sc;
+            fHandX = shX + d * (2.6 + swing * 2.0) * sc;
+            bHandY = ropeY;
+            fHandY = ropeY;
+            bFootX = hipX - d * 1.4 * sc - swing * 2.8 * sc;
+            fFootX = hipX + d * 1.8 * sc - swing * 2.8 * sc;
+            bFootY = footY - 1.6 * sc + Math.abs(swing) * 0.8 * sc;
+            fFootY = footY - 0.8 * sc + Math.abs(swing) * 0.6 * sc;
+            kneeBendX = d;
+            kneeBendY = -0.3;
+            elbowBendX = -d;
+            elbowBendY = 0.6;
+        } else if (mode === "fall") {
+            var fCos = Math.cos(phase);
+            bHandX = shX - d * 3.2 * sc + fCos * 1.4 * sc;
+            fHandX = shX + d * 3.5 * sc - fCos * 1.4 * sc;
+            bHandY = shY - 2.6 * sc + s * 1.8 * sc;
+            fHandY = shY - 2.6 * sc - s * 1.8 * sc;
+            bFootX = hipX - d * (1.8 + s * 1.4) * sc;
+            fFootX = hipX + d * (2.0 - s * 1.4) * sc;
+            bFootY = footY - (2.2 + Math.max(0, s) * 1.6) * sc;
+            fFootY = footY - (2.2 + Math.max(0, -s) * 1.6) * sc;
+            kneeBendX = d;
+            kneeBendY = -0.35;
+            elbowBendX = 0;
+            elbowBendY = 0.8;
+        } else if (mode === "dig") {
+            bFootX = hipX - d * 3.2 * sc;
+            fFootX = hipX + d * 2.8 * sc;
+            bHandX = shX - d * 2.5 * sc;
+            bHandY = waistY + 0.8 * sc;
+            fHandX = shX + d * 5.0 * sc;
+            fHandY = shY + 0.6 * sc;
+        }
+
+        // Solve knee and elbow joints
+        var bKnee = solveJoint(
+            hipX, hipY, bFootX, bFootY, thighL, shinL,
+            mode === "ladder" ? -1 : kneeBendX, kneeBendY
+        );
+        var fKnee = solveJoint(
+            hipX, hipY, fFootX, fFootY, thighL, shinL,
+            mode === "ladder" ? 1 : kneeBendX, kneeBendY
+        );
+        var bElbow = solveJoint(
+            shX, shY, bHandX, bHandY, uArmL, fArmL,
+            mode === "ladder" ? -1 : elbowBendX, elbowBendY
+        );
+        var fElbow = solveJoint(
+            shX, shY, fHandX, fHandY, uArmL, fArmL,
+            mode === "ladder" ? 1 : elbowBendX, elbowBendY
+        );
+
+        // Back leg + boot
+        fillCapsule(g, hipX, hipY, bKnee[0], bKnee[1], thighR, pal.legShade);
+        fillCapsule(g, bKnee[0], bKnee[1], bFootX, bFootY, shinR, pal.legShade);
+        fillCapsule(g, bFootX - d * 0.3 * sc, bFootY, bFootX + d * 1.4 * sc, bFootY, bootR, pal.bootShade);
+
+        // Back arm + hand
+        fillCapsule(g, shX, shY, bElbow[0], bElbow[1], uArmR, pal.armShade);
+        fillCapsule(g, bElbow[0], bElbow[1], bHandX, bHandY, fArmR, pal.armShade);
+        fillBatchCircles(g, [[bHandX, bHandY, handR]], pal.skinShade);
+
+        // Torso (chest + waist + belt)
+        fillCapsule(g, shX, shY, waistX, waistY, 2.05 * sc, pal.torso);
+        fillCapsule(g, waistX, waistY, hipX, hipY, 1.75 * sc, pal.torso);
+        fillCapsule(g, waistX - 1.3 * sc, hipY - 0.5 * sc, waistX + 1.3 * sc, hipY - 0.5 * sc, 0.55 * sc, pal.belt);
+
+        // Front leg + boot
+        fillCapsule(g, hipX, hipY, fKnee[0], fKnee[1], thighR, pal.leg);
+        fillCapsule(g, fKnee[0], fKnee[1], fFootX, fFootY, shinR, pal.leg);
+        fillCapsule(g, fFootX - d * 0.3 * sc, fFootY, fFootX + d * 1.5 * sc, fFootY, bootR, pal.boot);
+
+        // Neck + head (skin tone)
+        fillCapsule(g, shX, shY - 0.8 * sc, headX, headY + 1.2 * sc, 0.9 * sc, pal.skin);
+        fillBatchCircles(g, [[headX, headY, headR]], pal.skin);
+
+        // Helmet / cap & face eye
+        if (mode !== "ladder") {
+            fillCapsule(
+                g,
+                headX - d * 2.0 * sc, headY - 1.6 * sc,
+                headX + d * 1.8 * sc, headY - 1.8 * sc,
+                1.35 * sc, pal.cap
+            );
+            fillCapsule(
+                g,
+                headX + d * 0.6 * sc, headY - 1.3 * sc,
+                headX + d * 3.0 * sc, headY - 1.1 * sc,
+                0.65 * sc, pal.visor
+            );
+            fillBatchCircles(g, [[headX + d * 1.25 * sc, headY - 0.1 * sc, 0.5 * sc]], pal.eye);
+        } else {
+            fillCapsule(
+                g,
+                headX - 2.1 * sc, headY - 1.6 * sc,
+                headX + 2.1 * sc, headY - 1.6 * sc,
+                1.3 * sc, pal.cap
+            );
+        }
+
+        // Guard carrying gold badge
+        if (isGuard && hasGold) {
+            fillBatchCircles(g, [[headX, headY - 4.0 * sc, 1.35 * sc]], pal.gold);
+        }
+
+        // Front arm + hand (+ dig blaster)
+        fillCapsule(g, shX, shY, fElbow[0], fElbow[1], uArmR, pal.arm);
+        fillCapsule(g, fElbow[0], fElbow[1], fHandX, fHandY, fArmR, pal.arm);
+        fillBatchCircles(g, [[fHandX, fHandY, handR]], pal.skin);
+        if (mode === "dig") {
+            fillCapsule(
+                g,
+                fHandX, fHandY,
+                fHandX + d * 2.6 * sc, fHandY + 0.3 * sc,
+                0.8 * sc, pal.cap
+            );
         }
     }
 
-    function getRunnerFrame() {
-        if (player.digging > 0) return RUNNER_FRAMES.dig;
-        if (player.falling || player.inHole > 0) return RUNNER_FRAMES.fall;
-        var here = tileAt(player.cx, player.cy);
-        if (isLadder(here)) {
-            if (player.moving) {
-                return (player.animPhase % 2 === 0) ? RUNNER_FRAMES.ladder0 : RUNNER_FRAMES.ladder1;
-            }
-            return RUNNER_FRAMES.ladder0;
-        }
-        if (isRope(here)) {
-            if (player.moving) {
-                return (player.animPhase % 2 === 0) ? RUNNER_FRAMES.rope0 : RUNNER_FRAMES.rope1;
-            }
-            return RUNNER_FRAMES.rope0;
-        }
-        if (player.moving) {
-            var RUN_CYCLE = [RUNNER_FRAMES.run0, RUNNER_FRAMES.run1, RUNNER_FRAMES.run2, RUNNER_FRAMES.run1];
-            return RUN_CYCLE[player.animPhase % 4];
-        }
-        return RUNNER_FRAMES.run1;
-    }
 
-    function getGuardFrame(e) {
-        if (e.inHole > 0) {
-            // Authentic Apple II: stay still with hands up for first ~3s, then shake rapidly before climbing out
-            if (e.inHole > 900) return GUARD_FRAMES.shake0;
-            return (Math.floor(e.inHole / 120) % 2 === 0) ? GUARD_FRAMES.shake0 : GUARD_FRAMES.shake1;
-        }
-        if (e.falling) return GUARD_FRAMES.fall;
-        var here = tileAt(e.cx, e.cy);
-        if (isLadder(here)) {
-            if (e.moving) {
-                return ((e.animPhase || 0) % 2 === 0) ? GUARD_FRAMES.ladder0 : GUARD_FRAMES.ladder1;
-            }
-            return GUARD_FRAMES.ladder0;
-        }
-        if (isRope(here)) {
-            if (e.moving) {
-                return ((e.animPhase || 0) % 2 === 0) ? GUARD_FRAMES.rope0 : GUARD_FRAMES.rope1;
-            }
-            return GUARD_FRAMES.rope0;
-        }
-        if (e.moving) {
-            var G_RUN_CYCLE = [GUARD_FRAMES.run0, GUARD_FRAMES.run1, GUARD_FRAMES.run2, GUARD_FRAMES.run1];
-            return G_RUN_CYCLE[(e.animPhase || 0) % 4];
-        }
-        return GUARD_FRAMES.run1;
-    }
 
     function drawSceneUnsafe(g) {
         var backB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(PAL.back, 1));
@@ -4412,9 +4568,65 @@
         var holeB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(PAL.hole, 1));
         var hudB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(PAL.hudCyan, 1));
         var whiteB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(PAL.player, 1));
+        var whiteShadeB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm([186, 198, 216], 1));
         var orangeB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(PAL.guardBody, 1));
+        var orangeShadeB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm([186, 72, 0], 1));
         var cyanB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(PAL.digBeam, 1));
         var redB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm(PAL.guardRedHat, 1));
+        var skinB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm([244, 198, 166], 1));
+        var skinShadeB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm([204, 152, 120], 1));
+        var bootB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm([56, 68, 86], 1));
+        var bootShadeB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm([36, 44, 58], 1));
+        var beltB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm([44, 54, 70], 1));
+        var eyeB = g.newBrush(g.BrushType.SOLID_COLOR, rgbToNorm([20, 26, 36], 1));
+        var runnerPal = {
+            skin: skinB,
+            skinShade: skinShadeB,
+            torso: whiteB,
+            arm: whiteB,
+            armShade: whiteShadeB,
+            leg: whiteB,
+            legShade: whiteShadeB,
+            boot: bootB,
+            bootShade: bootShadeB,
+            belt: beltB,
+            eye: eyeB,
+            cap: cyanB,
+            visor: cyanB,
+            gold: goldOrgB
+        };
+        var guardPalNormal = {
+            skin: skinB,
+            skinShade: skinShadeB,
+            torso: orangeB,
+            arm: orangeB,
+            armShade: orangeShadeB,
+            leg: whiteB,
+            legShade: whiteShadeB,
+            boot: bootB,
+            bootShade: bootShadeB,
+            belt: beltB,
+            eye: eyeB,
+            cap: cyanB,
+            visor: cyanB,
+            gold: goldOrgB
+        };
+        var guardPalGold = {
+            skin: skinB,
+            skinShade: skinShadeB,
+            torso: orangeB,
+            arm: orangeB,
+            armShade: orangeShadeB,
+            leg: whiteB,
+            legShade: whiteShadeB,
+            boot: bootB,
+            bootShade: bootShadeB,
+            belt: beltB,
+            eye: eyeB,
+            cap: redB,
+            visor: redB,
+            gold: goldOrgB
+        };
 
         // Screen background
         fillRoundRect(g, 0, 0, CANVAS_W, CANVAS_H, 0, backB);
@@ -4526,20 +4738,18 @@
         fillBatchRects(g, goldOrange, 0, goldOrgB);
         fillBatchRects(g, goldWhite, 0, goldWhtB);
 
-        // 1. Runner sprite
-        var pFrame = getRunnerFrame();
-        var pOx = Math.round(player.px) + 2;
-        var pOy = Math.round(player.py) + 1;
-        if (player.inHole > 0) pOy += 4;
-        var pFlip = (player.digging > 0) ? (player.digDir < 0) : (player.dir < 0);
-        collectSpriteRects(pFrame, pOx, pOy, pFlip, whiteSprites, orangeSprites, cyanSprites, redSprites, false);
+        // 1. Runner vector character
+        var pPose = getCharacterPose(player, true);
+        var pCx = player.px + TILE * 0.5 + pPose.shakeX;
+        var pBaseY = player.py + TILE - 1 + (player.inHole > 0 ? 4 : 0);
+        drawVectorCharacter(g, false, pCx, pBaseY, 1, pPose.dir, pPose.mode, pPose.phase, false, runnerPal);
 
         // Digging beam & sparks (authentic Apple II diagonal laser ray)
         if (player.digging > 0) {
             var targetCx = player.cx + player.digDir;
             var targetCy = player.cy + 1;
-            var gunX = (player.digDir > 0) ? (pOx + 18) : (pOx + 2);
-            var gunY = pOy + 12;
+            var gunX = pCx + player.digDir * 7;
+            var gunY = pBaseY - 12;
             var hitX = targetCx * TILE + (player.digDir > 0 ? 8 : 16);
             var hitY = targetCy * TILE + 4;
 
@@ -4566,12 +4776,13 @@
         for (var i = 0; i < enemies.length; i++) {
             var e = enemies[i];
             if (e.dead > 0) continue;
-            var eFrame = getGuardFrame(e);
-            var eOx = Math.round(e.px) + 2;
-            var eOy = Math.round(e.py) + 1;
-            if (e.inHole > 0) eOy += 4;
-            var eFlip = e.dir < 0;
-            collectSpriteRects(eFrame, eOx, eOy, eFlip, whiteSprites, orangeSprites, cyanSprites, redSprites, e.hasGold);
+            var ePose = getCharacterPose(e, false);
+            var eCx = e.px + TILE * 0.5 + ePose.shakeX;
+            var eBaseY = e.py + TILE - 1 + (e.inHole > 0 ? 4 : 0);
+            drawVectorCharacter(
+                g, true, eCx, eBaseY, 1, ePose.dir, ePose.mode, ePose.phase,
+                e.hasGold, e.hasGold ? guardPalGold : guardPalNormal
+            );
         }
 
         // Bottom retro HUD bar (authentic Apple II colors and fonts)
@@ -4589,8 +4800,8 @@
         fillBatchRects(g, [gIcon[1]], 0, goldWhtB);
         appendRetroText(hudOrangeRects, padNum(score, 6), 34, hudY + 3, 2.2);
 
-        // 2. Runner sprite icon in HUD + lives in orange
-        collectSpriteRects(RUNNER_FRAMES.run1, 188, hudY + 1, false, whiteSprites, orangeSprites, cyanSprites, redSprites, false);
+        // 2. Runner icon in HUD + lives in orange
+        drawVectorCharacter(g, false, 198, hudY + 19, 0.78, 1, "idle", 0.25, false, runnerPal);
         appendRetroText(hudOrangeRects, padNum(lives, 3), 212, hudY + 3, 2.2);
 
         // 3. TIME label in cyan + elapsed time in orange
